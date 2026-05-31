@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>08 · Project Standards — LP Go Learning</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+<nav id="lesson-nav"></nav>
+<main class="lesson-page">
+
+  <span class="badge project">Project</span>
+  <h1>08 · Project Standards</h1>
+  <p class="subtitle">Layer rules, Fiber patterns, repository interfaces, DI, logging</p>
+
+  <section>
+    <h2>The Three-Layer Rule</h2>
+    <pre><code>HTTP Request
+    ↓
+Handler        — parse request, validate, call service, format response
+    ↓             NO business logic. NO default values for identity fields.
+Service        — all business logic, defaults (createdBy fallback to "system")
+    ↓             NO direct DB access.
+Repository     — data access only. NO business logic. NO HTTP concepts.
+    ↓
+Database</code></pre>
+    <div class="callout warning">
+      <strong>Layer violation example:</strong> A handler that directly calls <code>db.Find()</code>, or a repository that decides what default value to use for <code>createdBy</code>. Both are wrong.
+    </div>
+  </section>
+
+  <section>
+    <h2>Handler Pattern</h2>
+    <pre><code>// internal/handlers/system.go
+type SystemHandler struct {
+  config *config.Config
+}
+
+func NewSystemHandler(config *config.Config) *SystemHandler {
+  return &amp;SystemHandler{config: config}
+}
+
+func (h *SystemHandler) Info(c *fiber.Ctx) error {
+  return c.JSON(APIInfo{
+    Message:     "Welcome to LP Coupon API",
+    Environment: h.config.App.Environment,
+    Status:      "healthy",
+  })
+}</code></pre>
+    <p>Handlers receive dependencies via constructor injection. The handler method receives <code>*fiber.Ctx</code> and returns <code>error</code>. For errors, return them — the <code>ErrorHandlerMiddleware</code> formats the response.</p>
+  </section>
+
+  <section>
+    <h2>Service Pattern</h2>
+    <pre><code>// internal/services/coupon_service.go
+type CouponService struct {
+  logger               zlog.Logger
+  couponRepo           repository.CouponRepository   // interface, not concrete type
+  userCouponRepo       repository.UserCouponRepository
+  userCouponsCountRepo repository.UserCouponsCountRepository
+}
+
+func NewCouponService(
+  logger zlog.Logger,
+  couponRepo repository.CouponRepository,
+  userCouponRepo repository.UserCouponRepository,
+  userCouponsCountRepo repository.UserCouponsCountRepository,
+) *CouponService {
+  return &amp;CouponService{
+    logger: logger,
+    couponRepo: couponRepo,
+    userCouponRepo: userCouponRepo,
+    userCouponsCountRepo: userCouponsCountRepo,
+  }
+}</code></pre>
+    <p>Services accept interfaces (for testability), return concrete structs. Business defaults live here — e.g. <code>if createdBy == "" { createdBy = "system" }</code>.</p>
+  </section>
+
+  <section>
+    <h2>Repository Interface Pattern</h2>
+    <pre><code>// internal/repository/interfaces.go — contracts defined here
+type CouponRepository interface {
+  GetByID(ctx context.Context, id string) (*models.Coupon, error)
+  Create(ctx context.Context, coupon *models.Coupon) error
+  Update(ctx context.Context, id string, updates map[string]interface{}) error
+  // ... more methods
+}
+
+// internal/repository/coupon_repository.go — implementation
+type GORMCouponRepository struct {
+  db   *gorm.DB
+  roDB *gorm.DB
+}
+
+func NewCouponRepository(db, roDB *gorm.DB) *GORMCouponRepository {
+  return &amp;GORMCouponRepository{db: db, roDB: roDB}
+}</code></pre>
+    <p>Always add new methods to the interface in <code>interfaces.go</code> first, then implement them. Tests mock the interface — they never touch real DB.</p>
+  </section>
+
+  <section>
+    <h2>Dependency Injection — routes.go</h2>
+    <pre><code>// internal/routes/routes.go — all wiring happens here
+func SetupRoutes(app *fiber.App, db, roDB *database.ConnectionManager, ...) {
+  // 1. Create repositories (concrete types, accept DB)
+  couponRepo := repository.NewCouponRepository(db.GetDatabase().DB, roDB.GetDatabase().DB)
+  userCouponRepo := repository.NewUserCouponRepository(db.GetDatabase().DB, roDB.GetDatabase().DB)
+
+  // 2. Create services (accept repository interfaces)
+  couponService := services.NewCouponService(log.Zlogger, couponRepo, userCouponRepo, ...)
+
+  // 3. Create handlers (accept service)
+  couponHandler := handlers.NewCouponHandler(cfg, log.Zlogger, couponService)
+
+  // 4. Register routes
+  v1 := app.Group(BasePath + "/v1")
+  coupon := v1.Group("/coupon")
+  coupon.Get("/:couponId", couponHandler.GetCouponByID)
+}</code></pre>
+    <p>No DI framework. No <code>@Injectable()</code>. Just constructor calls in the right order. Adding a new endpoint: repeat this pattern.</p>
+  </section>
+
+  <section>
+    <h2>Logging with zlog</h2>
+    <pre><code>// Services and repositories receive a zlog.Logger
+s.logger.Infof(ctx, "Processing coupon %s", couponID)
+s.logger.Errorf(ctx, "Failed to get coupon: %v", err)
+
+// Always pass context — it carries the trace ID
+// The logger automatically includes it in the log output</code></pre>
+    <p>Never use <code>fmt.Println</code> or <code>log.Println</code> in service/repo code. Use the injected <code>zlog.Logger</code> with context so logs include the request trace ID.</p>
+  </section>
+
+  <div class="takeaways">
+    <h3>Key Takeaways</h3>
+    <ul>
+      <li>Handlers: parse + validate + call service + format response. No logic, no defaults.</li>
+      <li>Services: all business logic. Default values live here (<code>createdBy = "system"</code>).</li>
+      <li>Repositories: data access only. Defined by interfaces in <code>interfaces.go</code>.</li>
+      <li>All wiring in <code>routes.go</code>: repos → services → handlers → routes.</li>
+      <li>Log with the injected <code>zlog.Logger</code> + context — never <code>fmt.Println</code> in services/repos.</li>
+    </ul>
+  </div>
+
+</main>
+<script src="../js/nav.js"></script>
+</body>
+</html>
