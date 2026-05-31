@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>07 · Libraries &amp; Integrations — LP Go Learning</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+<nav id="lesson-nav"></nav>
+<main class="lesson-page">
+
+  <span class="badge project">Project</span>
+  <h1>07 · Libraries &amp; Integrations</h1>
+  <p class="subtitle">Every external dependency used in the LP services — what it is and how it's used</p>
+
+  <section>
+    <h2>Fiber — HTTP Framework</h2>
+    <p>Fiber is an Express-inspired web framework. Fast and lightweight.</p>
+    <pre><code>// Create app with config
+app := fiber.New(fiber.Config{
+  ReadTimeout:  10 * time.Second,
+  ErrorHandler: middleware.ErrorHandlerMiddleware(log),
+})
+
+// Register middleware
+app.Use(middleware.RequestIDMiddleware())
+
+// Define routes
+app.Get("/health", healthHandler.Health)
+
+// Start server
+app.Listen(":8080")</code></pre>
+    <p>Handler signature: <code>func(c *fiber.Ctx) error</code>. Read params with <code>c.Params("id")</code>, body with <code>c.BodyParser(&amp;req)</code>, respond with <code>c.JSON(data)</code>.</p>
+  </section>
+
+  <section>
+    <h2>GORM — PostgreSQL ORM</h2>
+    <p>Used in <code>lp-coupon-api</code>. Maps Go structs to database tables.</p>
+    <pre><code>// Model with GORM tags
+type Coupon struct {
+  ID        string    `gorm:"primaryKey"`
+  Name      string    `gorm:"not null"`
+  Status    string
+  CreatedAt time.Time `gorm:"autoCreateTime"`
+}
+
+// Create
+db.Create(&amp;coupon)
+
+// Query
+var coupon Coupon
+db.Where("id = ?", id).First(&amp;coupon)
+
+// Update
+db.Model(&amp;coupon).Updates(map[string]interface{}{"status": "inactive"})
+
+// GORM transaction
+db.Transaction(func(tx *gorm.DB) error {
+  if err := tx.Create(&amp;coupon).Error; err != nil {
+    return err // rollback
+  }
+  return nil // commit
+})</code></pre>
+  </section>
+
+  <section>
+    <h2>MongoDB Driver — lp-reward-store-api</h2>
+    <pre><code>// Insert
+collection.InsertOne(ctx, document)
+
+// Find with filter
+filter := bson.M{"status": "active"}
+cursor, err := collection.Find(ctx, filter)
+
+// Filter with $NOW (server-side, not time.Now())
+filter := bson.M{
+  "expiry_date": bson.M{"$gt": "$$NOW"}, // MongoDB system variable
+}</code></pre>
+    <div class="callout warning">
+      <strong>Important:</strong> Use <code>$$NOW</code> (MongoDB system variable) for date comparisons — not <code>time.Now()</code> from Go. This avoids clock skew between app servers.
+    </div>
+  </section>
+
+  <section>
+    <h2>Redis — Caching &amp; Rate Limiting</h2>
+    <pre><code>// Client setup (in main.go)
+rdb := redis.NewClient(&amp;redis.Options{
+  Addr:     "localhost:6379",
+  Password: "",
+  DB:       0,
+})
+
+// Cache get
+val, err := rdb.Get(ctx, "RewardStore|RewardStore:"+id).Result()
+if err == redis.Nil {
+  // cache miss — fetch from DB
+}
+
+// Cache set with TTL
+rdb.Set(ctx, cacheKey, data, 5*time.Minute)
+
+// Atomic multi-key delete (MULTI/EXEC = all-or-nothing)
+pipe := rdb.TxPipeline()
+pipe.Del(ctx, key1)
+pipe.Del(ctx, key2)
+_, err = pipe.Exec(ctx)</code></pre>
+    <p>Cache key format: <code>helpers.CacheKey("RewardStore|{Collection}", id)</code></p>
+  </section>
+
+  <section>
+    <h2>Kafka Producer</h2>
+    <pre><code>// Initialized in routes.go when KAFKA_BOOTSTRAP_SERVER is set
+producer, err := clients.NewKafkaProducer(
+  cfg.Kafka.BootstrapServer,
+  cfg.Kafka.BrokerCertContent,
+  // ... TLS certs
+  cfg.Kafka.UpdateUserCouponTopic,
+  log.Zlogger,
+)
+
+// Publish a message (in service layer)
+err := kafkaProducer.Produce(ctx, key, valueBytes)</code></pre>
+    <p>Kafka initialization is guarded — if <code>KAFKA_BOOTSTRAP_SERVER</code> is empty, the producer is <code>nil</code> and events are skipped silently. This allows local development without Kafka.</p>
+  </section>
+
+  <section>
+    <h2>ECI HTTP Client</h2>
+    <p>ECI is an external service. The client wraps standard Go HTTP calls with auth headers.</p>
+    <pre><code>// Initialized in routes.go
+eciClient := clients.NewECIClient(cfg.ECI.URL, cfg.ECI.Key)
+
+// Used in service layer
+resp, err := eciClient.GetCustomer(ctx, customerID)
+if err != nil {
+  return nil, fmt.Errorf("ECI GetCustomer: %w", err)
+}</code></pre>
+  </section>
+
+  <section>
+    <h2>Viper — Configuration</h2>
+    <pre><code>// config/config.go — load from env vars
+viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+viper.AutomaticEnv()
+
+// Set defaults
+viper.SetDefault("server.port", "8080")
+viper.SetDefault("rate_limit.max_requests", 100)
+
+// Access config
+cfg.Server.Port         // typed struct
+cfg.Kafka.BootstrapServer</code></pre>
+    <p>All config comes from environment variables. See <code>.env.example</code> for the full list. Never hardcode values — always use config.</p>
+  </section>
+
+  <section>
+    <h2>Retry — pkg/retryer</h2>
+    <pre><code>// Configure
+retryFn := retryer.NewBackOffDelay(&amp;retryer.Config{
+  Attempts: 3,
+  Delay:    500 * time.Millisecond,
+})
+
+// Use
+err := retryFn(ctx, log, func() error {
+  return externalService.Call(ctx)
+})</code></pre>
+    <p>Two strategies: <code>NewBackOffDelay</code> (exponential) and <code>NewFixedDelay</code>. Use backoff for external APIs, fixed for predictable retries.</p>
+  </section>
+
+  <section>
+    <h2>Rate Limiting — pkg/ratelimit + middleware</h2>
+    <pre><code>// Key generation (pkg/ratelimit)
+keys := ratelimit.NewKeys("ILPC014")
+// keys.Counter = "CouponAPI|RateLimit|ILPC014|counter"
+// keys.Lock    = "CouponAPI|RateLimit|ILPC014|lock"
+
+// Apply to a route (routes.go)
+userCoupon.Post("/bulk",
+  rateLimiter.WithKeys(ratelimit.NewKeys("ILPC014")),
+  userCouponHandler.BulkIssueCoupon,
+)</code></pre>
+    <p>Rate limits are per-route, identified by the ILPC code. The Redis-backed counter increments per request; the lock key blocks when the limit is exceeded.</p>
+  </section>
+
+  <div class="takeaways">
+    <h3>Key Takeaways</h3>
+    <ul>
+      <li>Fiber handler signature: <code>func(c *fiber.Ctx) error</code> — same as Express but typed</li>
+      <li>GORM wraps SQL — use <code>db.Transaction()</code> for all-or-nothing DB writes</li>
+      <li>MongoDB: use <code>$$NOW</code> for date filters, not <code>time.Now()</code></li>
+      <li>Redis: <code>TxPipeline().Exec()</code> for atomic multi-key operations</li>
+      <li>Kafka init is optional — guarded by env var, nil-safe for local dev</li>
+      <li>All config from env via Viper — never hardcode values</li>
+      <li>Retry: <code>NewBackOffDelay</code> for external APIs; rate limit applied per route by ILPC code</li>
+    </ul>
+  </div>
+
+</main>
+<script src="../js/nav.js"></script>
+</body>
+</html>
