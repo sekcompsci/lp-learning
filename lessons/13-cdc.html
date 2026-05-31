@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>13 · Change Data Capture — LP Go Learning</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+<nav id="lesson-nav"></nav>
+<main class="lesson-page">
+
+  <span class="badge project">Project</span>
+  <h1>13 · Change Data Capture</h1>
+  <p class="subtitle">CDC concepts, Kafka JDBC sink connector, DB→topic pipeline</p>
+
+  <section>
+    <h2>What is CDC?</h2>
+    <p>Change Data Capture (CDC) captures every INSERT, UPDATE, and DELETE from a database and streams those changes as events. Downstream services subscribe to those events instead of polling the database.</p>
+    <pre><code>Without CDC:
+  Service A writes to DB
+  Service B polls DB every 5 seconds — wasteful, delayed
+
+With CDC:
+  Service A writes to DB
+  CDC captures the change → Kafka topic
+  Service B consumes the event immediately — no polling, no delay</code></pre>
+    <p>CDC is how the LP platform keeps downstream systems (analytics, notifications, loyalty) in sync with coupon and reward store data without tight coupling.</p>
+  </section>
+
+  <section>
+    <h2>The Pipeline</h2>
+    <pre><code>PostgreSQL / MongoDB
+    │  (write-ahead log / oplog)
+    ↓
+Kafka Connect (JDBC Sink Connector)
+    │  reads DB changes, serializes to Avro
+    ↓
+Kafka Topic  (e.g. "lp.coupon.user_coupons")
+    │
+    ├── Consumer A: Analytics service
+    ├── Consumer B: Notification service
+    └── Consumer C: Loyalty points service</code></pre>
+    <p>The JDBC sink connector polls the DB (or reads the WAL) and writes rows as Avro-encoded messages to Kafka. Schema Registry stores the Avro schema so consumers know the message shape.</p>
+  </section>
+
+  <section>
+    <h2>Avro Schema</h2>
+    <p>Messages are encoded with Avro — a compact binary format with a schema. The schema is registered in Schema Registry and referenced by ID in each message.</p>
+    <pre><code>// In lp-coupon-api, the Kafka producer serializes with Avro
+// github.com/hamba/avro/v2 handles encoding
+
+// Schema example (user_coupon event):
+{
+  "type": "record",
+  "name": "UserCouponEvent",
+  "fields": [
+    {"name": "user_coupon_id", "type": "string"},
+    {"name": "customer_id",    "type": "string"},
+    {"name": "status",         "type": "string"},
+    {"name": "updated_at",     "type": "long", "logicalType": "timestamp-millis"}
+  ]
+}</code></pre>
+  </section>
+
+  <section>
+    <h2>Producing Events — lp-coupon-api</h2>
+    <pre><code>// routes.go — Kafka producer initialized when env vars are set
+producer, err := clients.NewKafkaProducer(
+  cfg.Kafka.BootstrapServer,
+  cfg.Kafka.BrokerCertContent,      // TLS cert
+  cfg.Kafka.BrokerClientCertContent,
+  cfg.Kafka.BrokerClientKeyContent,
+  cfg.Kafka.SchemaRegistryURL,
+  cfg.Kafka.UpdateUserCouponTopic,
+  log.Zlogger,
+)
+
+// services — produce on state change
+err := kafkaProducer.Produce(ctx, userCouponID, eventBytes)</code></pre>
+    <p>If <code>KAFKA_BOOTSTRAP_SERVER</code> is empty (local dev), the producer is <code>nil</code> and <code>Produce</code> is never called — events are silently skipped. This means local dev works without Kafka running.</p>
+  </section>
+
+  <section>
+    <h2>Failure Modes</h2>
+    <ul>
+      <li><strong>Connector lag:</strong> If the connector falls behind, consumers see delayed events. Monitor consumer group lag in the Kafka dashboard.</li>
+      <li><strong>Schema evolution:</strong> Adding a field to the Avro schema must be backwards-compatible (add with a default value). Removing fields breaks consumers.</li>
+      <li><strong>At-least-once delivery:</strong> Kafka guarantees at-least-once. Consumers must be idempotent — processing the same event twice should not cause duplicate data.</li>
+      <li><strong>Dead letter queue:</strong> Messages that fail to process go to a DLQ topic for manual inspection.</li>
+    </ul>
+  </section>
+
+  <div class="takeaways">
+    <h3>Key Takeaways</h3>
+    <ul>
+      <li>CDC streams DB changes to Kafka topics — no polling, near-realtime downstream sync</li>
+      <li>JDBC sink connector: reads DB → serializes to Avro → writes to Kafka topic</li>
+      <li>Avro schema is in Schema Registry — always add fields with defaults for backwards compat</li>
+      <li>Kafka is optional in local dev — producer init is guarded by env var</li>
+      <li>Consumers must be idempotent — Kafka delivers at-least-once, not exactly-once</li>
+    </ul>
+  </div>
+
+</main>
+<script src="../js/nav.js"></script>
+</body>
+</html>
