@@ -1,0 +1,1600 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>06 · Concurrency — LP Go Learning</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    /* ── Animation shared ── */
+    .anim-wrap {
+      background: #f4f8ff;
+      border: 1px solid #c0d8f0;
+      border-radius: 8px;
+      padding: 14px 16px;
+      margin-bottom: 20px;
+      overflow-x: auto;
+    }
+    .anim-body {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+      min-height: 72px;
+      margin-bottom: 10px;
+    }
+    .anim-msg {
+      font-size: 12px;
+      color: #444;
+      min-height: 18px;
+      margin-bottom: 10px;
+      font-family: 'SF Mono', Consolas, monospace;
+    }
+    .anim-controls {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .anim-controls button {
+      padding: 4px 12px;
+      border-radius: 4px;
+      border: 1px solid #bbb;
+      background: #fff;
+      cursor: pointer;
+      font-size: 12px;
+      font-family: system-ui, sans-serif;
+    }
+    .anim-controls button:hover { background: #e8f0f8; }
+    .anim-counter { font-size: 11px; color: #888; }
+
+    /* ── Anim 1: Goroutine boxes ── */
+    .g-box {
+      border: 2px solid #ccc;
+      border-radius: 6px;
+      padding: 8px 14px;
+      text-align: center;
+      font-family: 'SF Mono', Consolas, monospace;
+      font-size: 12px;
+      min-width: 80px;
+      transition: background 0.35s, border-color 0.35s, opacity 0.35s, box-shadow 0.35s;
+    }
+    .g-box .g-name  { font-weight: 700; font-size: 13px; }
+    .g-box .g-lbl   { font-size: 10px; color: #888; margin-top: 2px; }
+    .g-idle    { background: #f0f0f0; border-color: #ccc; }
+    .g-running { background: #d4edda; border-color: #28a745;
+                 animation: g-pulse 0.85s ease-in-out infinite alternate; }
+    .g-blocked { background: #fff3cd; border-color: #ffc107; }
+    .g-done    { background: #e8f5e9; border-color: #81c784; opacity: 0.55; }
+    @keyframes g-pulse {
+      from { box-shadow: 0 0 0 0 rgba(40,167,69,0); }
+      to   { box-shadow: 0 0 8px 2px rgba(40,167,69,0.4); }
+    }
+
+    /* ── Anim 2: Channel buffer ── */
+    .anim-ch-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+    .ch-actor {
+      border: 2px solid #aaa;
+      border-radius: 6px;
+      padding: 8px 12px;
+      font-family: 'SF Mono', Consolas, monospace;
+      font-size: 12px;
+      min-width: 70px;
+      text-align: center;
+      transition: background 0.3s, border-color 0.3s;
+    }
+    .ch-actor.active  { background: #d4edda; border-color: #28a745; }
+    .ch-actor.blocked { background: #fff3cd; border-color: #ffc107; }
+    .ch-actor.idle    { background: #f0f0f0; border-color: #ccc; }
+    .ch-arrow { font-size: 18px; color: #aaa; transition: color 0.3s; }
+    .ch-arrow.live { color: #28a745; }
+    .ch-slots { display: flex; gap: 4px; }
+    .ch-slot {
+      width: 36px; height: 36px;
+      border: 2px solid #bbb;
+      border-radius: 4px;
+      background: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      font-family: monospace;
+      color: #888;
+      transition: background 0.3s, border-color 0.3s, color 0.3s;
+    }
+    .ch-slot.filled { background: #cce5ff; border-color: #004085; color: #004085; font-weight: 700; }
+    .ch-slot.unb    { width: 50px; font-size: 9px; text-align: center; }
+    .ch-label { font-size: 10px; color: #888; text-align: center; font-family: monospace; margin-top: 2px; }
+
+    /* ── Anim 3: select ── */
+    .sel-diagram {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+    .sel-channels { display: flex; flex-direction: column; gap: 8px; }
+    .sel-ch {
+      border: 2px solid #bbb;
+      border-radius: 6px;
+      padding: 6px 14px;
+      font-family: 'SF Mono', Consolas, monospace;
+      font-size: 12px;
+      text-align: center;
+      min-width: 60px;
+      transition: background 0.3s, border-color 0.3s;
+    }
+    .sel-ch.fired { background: #cce5ff; border-color: #004085; }
+    .sel-arrow { font-size: 22px; color: #bbb; transition: color 0.3s; }
+    .sel-arrow.live { color: #004085; }
+    .sel-box {
+      border: 2px solid #bbb;
+      border-radius: 8px;
+      padding: 10px 16px;
+      font-family: 'SF Mono', Consolas, monospace;
+      font-size: 12px;
+      background: #fff;
+      line-height: 1.8;
+      transition: border-color 0.3s;
+      min-width: 160px;
+    }
+    .sel-case { padding: 1px 4px; border-radius: 3px; transition: background 0.25s; }
+    .sel-case.active { background: #b8daff; }
+
+    /* ── Anim 4: Context tree ── */
+    .ctx-tree { font-family: 'SF Mono', Consolas, monospace; font-size: 12px; margin-bottom: 10px; }
+    .ctx-node {
+      display: inline-block;
+      border: 2px solid #28a745;
+      border-radius: 6px;
+      padding: 5px 12px;
+      background: #d4edda;
+      color: #155724;
+      transition: background 0.35s, border-color 0.35s, color 0.35s;
+    }
+    .ctx-node.cancelled { background: #f8d7da; border-color: #dc3545; color: #721c24; }
+    .ctx-row  { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+    .ctx-line { color: #aaa; font-size: 14px; user-select: none; }
+    .ctx-children { margin-left: 28px; }
+
+    /* ── Anim 5: WaitGroup ── */
+    .wg-counter {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      width: 72px; height: 72px; border-radius: 50%; border: 3px solid #bbb;
+      font-family: 'SF Mono', Consolas, monospace; font-size: 28px; font-weight: 700;
+      transition: background 0.4s, border-color 0.4s, color 0.4s;
+      background: #f0f0f0; color: #555;
+    }
+    .wg-counter .wg-lbl { font-size: 9px; font-weight: 400; color: #888; margin-top: -4px; }
+    .wg-counter.nonzero  { background: #fff3cd; border-color: #ffc107; color: #856404; }
+    .wg-counter.zero     { background: #d4edda; border-color: #28a745; color: #155724; }
+
+    /* ── Anim 6: Mutex ── */
+    .mu-lock {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 10px 16px; border: 3px solid #bbb; border-radius: 8px;
+      font-family: 'SF Mono', Consolas, monospace; font-size: 12px;
+      background: #f0f0f0; min-width: 100px; text-align: center;
+      transition: background 0.35s, border-color 0.35s;
+    }
+    .mu-lock.free   { background: #f0f0f0; border-color: #bbb; }
+    .mu-lock.locked { background: #f8d7da; border-color: #dc3545; }
+    .mu-lock .mu-holder { font-size: 10px; color: #888; margin-top: 2px; }
+    .mu-lock.locked .mu-holder { color: #721c24; font-weight: 700; }
+    .mu-counter-badge {
+      display: inline-flex; align-items: center; justify-content: center;
+      font-family: 'SF Mono', Consolas, monospace; font-size: 22px; font-weight: 700;
+      background: #e8f5e9; border: 2px solid #81c784; border-radius: 6px;
+      padding: 6px 14px; color: #2e7d32; transition: background 0.3s; min-width: 56px;
+    }
+    .g-wanting { background: #fff3cd; border-color: #ffc107; }
+    .g-holding { background: #cce5ff; border-color: #004085;
+                 animation: g-pulse-blue 0.85s ease-in-out infinite alternate; }
+    @keyframes g-pulse-blue {
+      from { box-shadow: 0 0 0 0 rgba(0,64,133,0); }
+      to   { box-shadow: 0 0 8px 2px rgba(0,64,133,0.35); }
+    }
+
+    /* ── Anim 7: sync.Once ── */
+    .once-init-box {
+      border: 3px solid #bbb; border-radius: 8px; padding: 10px 18px;
+      font-family: 'SF Mono', Consolas, monospace; font-size: 12px;
+      background: #f0f0f0; color: #aaa; text-align: center; min-width: 120px;
+      transition: background 0.4s, border-color 0.4s, color 0.4s, box-shadow 0.4s;
+    }
+    .once-init-box .once-lbl { font-size: 10px; margin-top: 2px; }
+    .once-init-box.active { background: #d4edda; border-color: #28a745; color: #155724;
+      animation: g-pulse 0.85s ease-in-out infinite alternate; }
+    .once-init-box.done   { background: #e8f5e9; border-color: #81c784; color: #388e3c; opacity: 0.75; }
+    .g-calling { background: #e3f2fd; border-color: #1565c0; }
+    .g-gotinst { background: #e8f5e9; border-color: #28a745; opacity: 0.85; }
+    .g-skipped { background: #f5f5f5; border-color: #9e9e9e; opacity: 0.7; }
+
+    /* ── Anim 8: Race Conditions ── */
+    .race-layout {
+      display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; margin-bottom: 10px;
+    }
+    .race-lane { display: flex; flex-direction: column; gap: 4px; min-width: 90px; }
+    .race-lane-label {
+      font-family: 'SF Mono', Consolas, monospace; font-size: 11px;
+      font-weight: 700; color: #555; margin-bottom: 4px;
+    }
+    .race-op {
+      border: 2px solid #ddd; border-radius: 4px; padding: 4px 8px;
+      font-family: 'SF Mono', Consolas, monospace; font-size: 11px;
+      background: #fafafa; color: #ccc; transition: background 0.3s, border-color 0.3s, color 0.3s;
+      text-align: center;
+    }
+    .race-op.read  { background: #e3f2fd; border-color: #1565c0; color: #1565c0; }
+    .race-op.write { background: #fce4ec; border-color: #c62828; color: #c62828; }
+    .race-op.done  { background: #f0f0f0; border-color: #ccc; color: #999; opacity: 0.6; }
+    .race-counter-box {
+      display: flex; flex-direction: column; align-items: center; gap: 4px;
+      padding: 12px 18px; border: 3px solid #bbb; border-radius: 8px; background: #fff;
+      font-family: 'SF Mono', Consolas, monospace; transition: border-color 0.35s, background 0.35s;
+      min-width: 90px;
+    }
+    .race-counter-box .rc-label { font-size: 10px; color: #888; }
+    .race-counter-box .rc-value { font-size: 32px; font-weight: 700; color: #333; }
+    .race-counter-box.racing { border-color: #dc3545; background: #fff5f5; }
+    .race-counter-box .rc-value.corrupt { color: #dc3545; }
+    .race-banner {
+      display: none; background: #f8d7da; border: 2px solid #dc3545; border-radius: 6px;
+      padding: 8px 14px; font-family: 'SF Mono', Consolas, monospace; font-size: 12px;
+      color: #721c24; margin-bottom: 10px;
+    }
+    .race-banner.visible { display: block; }
+
+    /* ── Anim 9: Worker Pool ── */
+    .wp-layout { display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px; }
+    .wp-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .wp-label { font-family: 'SF Mono', Consolas, monospace; font-size: 10px; color: #888; min-width: 72px; }
+    .wp-job {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 34px; height: 34px; border: 2px solid #ddd; border-radius: 5px;
+      font-family: 'SF Mono', Consolas, monospace; font-size: 11px; font-weight: 700;
+      background: #f5f5f5; color: #ccc; transition: background 0.3s, border-color 0.3s, color 0.3s, opacity 0.3s;
+    }
+    .wp-job.queued   { background: #fff3cd; border-color: #ffc107; color: #856404; }
+    .wp-job.inflight { background: #cce5ff; border-color: #004085; color: #004085; }
+    .wp-job.done     { background: #e8f5e9; border-color: #81c784; color: #388e3c; opacity: 0.5; }
+    .wp-job.closed   { background: #f8d7da; border-color: #dc3545; color: #721c24;
+                       width: auto; padding: 0 8px; font-size: 9px; }
+    .wp-worker {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 6px 10px; border: 2px solid #bbb; border-radius: 6px;
+      font-family: 'SF Mono', Consolas, monospace; font-size: 11px; min-width: 72px;
+      text-align: center; background: #f0f0f0; transition: background 0.35s, border-color 0.35s;
+    }
+    .wp-worker .wp-wname { font-weight: 700; font-size: 12px; }
+    .wp-worker .wp-wlbl  { font-size: 9px; color: #888; margin-top: 1px; }
+    .wp-worker.idle { background: #f0f0f0; border-color: #ccc; }
+    .wp-worker.busy { background: #cce5ff; border-color: #004085;
+                      animation: g-pulse-blue 0.85s ease-in-out infinite alternate; }
+    .wp-worker.done { background: #e8f5e9; border-color: #81c784; opacity: 0.6; }
+    .wp-wait-box {
+      display: inline-flex; align-items: center; padding: 6px 14px;
+      border: 2px solid #bbb; border-radius: 6px; font-family: 'SF Mono', Consolas, monospace;
+      font-size: 11px; background: #f0f0f0; transition: background 0.3s, border-color 0.3s, color 0.3s;
+    }
+    .wp-wait-box.blocking { background: #fff3cd; border-color: #ffc107; color: #856404; }
+    .wp-wait-box.done     { background: #d4edda; border-color: #28a745; color: #155724; }
+
+    /* ── Anim 10: errgroup ── */
+    .eg-layout { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin-bottom: 10px; }
+    .eg-ctx-row { display: flex; align-items: center; gap: 10px; }
+    .eg-ctx-label { font-size: 10px; color: #888; font-family: monospace; min-width: 44px; }
+    .eg-ctx {
+      display: inline-flex; align-items: center; padding: 5px 14px;
+      border: 2px solid #28a745; border-radius: 6px; background: #d4edda;
+      font-family: 'SF Mono', Consolas, monospace; font-size: 12px; color: #155724;
+      transition: background 0.35s, border-color 0.35s, color 0.35s;
+    }
+    .eg-ctx.cancelled { background: #f8d7da; border-color: #dc3545; color: #721c24; }
+    .eg-goroutines { display: flex; gap: 10px; flex-wrap: wrap; }
+    .eg-goroutine {
+      display: flex; flex-direction: column; align-items: center; padding: 8px 12px;
+      border: 2px solid #bbb; border-radius: 6px; font-family: 'SF Mono', Consolas, monospace;
+      font-size: 11px; min-width: 78px; text-align: center; background: #f0f0f0;
+      transition: background 0.35s, border-color 0.35s;
+    }
+    .eg-goroutine .eg-gname { font-weight: 700; font-size: 13px; }
+    .eg-goroutine .eg-glbl  { font-size: 10px; color: #888; margin-top: 2px; }
+    .eg-goroutine.running { background: #d4edda; border-color: #28a745;
+      animation: g-pulse 0.85s ease-in-out infinite alternate; }
+    .eg-goroutine.errored { background: #f8d7da; border-color: #dc3545; }
+    .eg-goroutine.stopped { background: #fff3cd; border-color: #ffc107; opacity: 0.85; }
+    .eg-goroutine.exited  { background: #e8f5e9; border-color: #81c784; opacity: 0.55; }
+    .eg-result {
+      display: inline-flex; align-items: center; padding: 6px 14px;
+      border: 2px solid #bbb; border-radius: 6px; font-family: 'SF Mono', Consolas, monospace;
+      font-size: 11px; background: #f0f0f0; color: #aaa;
+      transition: background 0.3s, border-color 0.3s, color 0.3s;
+    }
+    .eg-result.has-error { background: #f8d7da; border-color: #dc3545; color: #721c24; font-weight: 700; }
+  </style>
+</head>
+<body>
+<nav id="lesson-nav"></nav>
+<main class="lesson-page">
+
+  <span class="badge craft">Craft</span>
+  <h1>06 · Concurrency</h1>
+  <p class="subtitle">Goroutines, channels, context, sync primitives, errgroup — with real LP examples</p>
+
+  <div class="callout analogy">
+    <strong>Coming from JavaScript?</strong>
+    Go concurrency is <em>not</em> async/await. JS has one thread with an event loop — "async" just schedules callbacks.
+    Goroutines run on <em>real OS threads</em>, in parallel, right now. No <code>await</code> keyword, no Promise chain.
+    The mental model is closer to spawning actual worker threads — but goroutines are ~2 KB and you can have millions.
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <section>
+    <h2>1. Goroutines</h2>
+    <p>Prefix any function call with <code>go</code> to run it concurrently. The caller doesn't wait — it continues immediately.</p>
+
+    <div class="anim-wrap">
+      <div class="anim-body" id="ag-stage"></div>
+      <div class="anim-msg"  id="ag-msg"></div>
+      <div class="anim-controls">
+        <button id="ag-play" onclick="animGoroutine.play()">▶ Play</button>
+        <button onclick="animGoroutine.next()">Step →</button>
+        <button onclick="animGoroutine.reset()">↺ Reset</button>
+        <span class="anim-counter" id="ag-counter"></span>
+      </div>
+    </div>
+
+    <pre><code>// spawn a goroutine — caller continues without waiting
+go func() {
+    fmt.Println("running concurrently")
+}()
+
+// pass args by value — capture at spawn time, not closure time
+for i := 0; i &lt; 3; i++ {
+    go func(n int) {
+        fmt.Println(n) // safe: n is a copy
+    }(i)
+}</code></pre>
+
+    <h3>Real LP code — starting the HTTP server</h3>
+    <p>In <code>lp-reward-store-api/main.go</code>, Fiber's <code>Listen</code> blocks, so it runs in a goroutine while main waits on the shutdown signal:</p>
+    <pre><code>go func() {
+    log.WithFields(logger.Fields{
+        "address": cfg.Server.GetServerAddress(),
+    }).Info("Starting HTTP server")
+
+    if err := app.fiber.Listen(cfg.Server.GetServerAddress()); err != nil {
+        serverErrors &lt;- fmt.Errorf("server failed to start: %w", err)
+    }
+}()</code></pre>
+
+    <div class="callout warning">
+      <strong>Goroutine leak — every goroutine needs an exit path.</strong>
+      A goroutine blocked forever on a channel or sleeping in a loop leaks memory.
+      See <a href="05-anti-patterns.html">Lesson 05 · Anti-Patterns</a> for the goroutine leak pattern.
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <section>
+    <h2>2. Channels</h2>
+    <p>Channels are typed, goroutine-safe pipes. Send with <code>ch &lt;- v</code>, receive with <code>v := &lt;-ch</code>.</p>
+    <ul>
+      <li><strong>Unbuffered</strong> <code>make(chan T)</code> — sender blocks until a receiver is ready. Synchronises two goroutines.</li>
+      <li><strong>Buffered</strong> <code>make(chan T, n)</code> — sender only blocks when the buffer is full.</li>
+    </ul>
+
+    <div class="anim-wrap">
+      <div class="anim-ch-row" id="ach-row"></div>
+      <div class="anim-msg" id="ach-msg"></div>
+      <div class="anim-controls">
+        <button onclick="animChannel.next()">Next ▶</button>
+        <button onclick="animChannel.reset()">↺ Reset</button>
+        &nbsp;
+        <label style="font-size:12px;cursor:pointer;">
+          <input type="checkbox" id="ach-toggle" onchange="animChannel.toggleBuffered(this.checked)" checked>
+          Buffered (cap=3)
+        </label>
+        <span class="anim-counter" id="ach-counter"></span>
+      </div>
+    </div>
+
+    <pre><code>// unbuffered — sender blocks until receiver reads
+ch := make(chan string)
+go func() { ch &lt;- "hello" }()  // blocks here until someone receives
+msg := &lt;-ch                    // unblocks the sender
+
+// buffered cap=3 — sender only blocks when buffer full
+jobs := make(chan int, 3)
+jobs &lt;- 1  // ok
+jobs &lt;- 2  // ok
+jobs &lt;- 3  // ok
+jobs &lt;- 4  // BLOCKS — buffer full
+
+// close signals "no more values" — range exits cleanly
+close(jobs)
+for j := range jobs { fmt.Println(j) }
+</code></pre>
+
+    <h3>Real LP code — server error + shutdown channels</h3>
+    <p>In <code>lp-reward-store-api/main.go</code>, both channels are buffered with cap 1. The OS signal subsystem must not block when it delivers a signal:</p>
+    <pre><code>serverErrors := make(chan error, 1)   // buffered: sender (goroutine) never blocks
+shutdown     := make(chan os.Signal, 1)
+
+signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM)
+
+go func() {
+    if err := app.fiber.Listen(addr); err != nil {
+        serverErrors &lt;- fmt.Errorf("server failed: %w", err)
+    }
+}()</code></pre>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <section>
+    <h2>3. <code>select</code> Multiplexing</h2>
+    <p><code>select</code> waits on multiple channel operations. The first one ready wins. If multiple are ready simultaneously, Go picks one at random.</p>
+
+    <div class="anim-wrap">
+      <div class="sel-diagram" id="asel-diagram"></div>
+      <div class="anim-msg" id="asel-msg">Press Play — watch which channel fires each round</div>
+      <div class="anim-controls">
+        <button id="asel-play" onclick="animSelect.toggle()">▶ Play</button>
+        <button onclick="animSelect.reset()">↺ Reset</button>
+      </div>
+    </div>
+
+    <pre><code>select {
+case v := &lt;-ch1:
+    fmt.Println("received from ch1:", v)
+case v := &lt;-ch2:
+    fmt.Println("received from ch2:", v)
+case &lt;-time.After(5 * time.Second):
+    fmt.Println("timeout — nothing arrived")
+}
+
+// non-blocking check with default
+select {
+case v := &lt;-ch:
+    process(v)
+default:
+    // ch was empty, continue without waiting
+}</code></pre>
+
+    <h3>Real LP code — graceful shutdown pattern</h3>
+    <p><code>lp-reward-store-api/main.go</code> uses <code>select</code> to handle whichever arrives first — a startup failure or an OS signal:</p>
+    <pre><code>select {
+case err := &lt;-serverErrors:
+    log.WithError(err).Fatal("Server startup failed")
+
+case sig := &lt;-shutdown:
+    log.WithFields(logger.Fields{
+        "signal": sig.String(),
+    }).Info("Received shutdown signal")
+
+    if err := app.gracefulShutdown(); err != nil {
+        log.WithError(err).Error("Graceful shutdown failed")
+        os.Exit(1)
+    }
+    log.Info("Application shutdown completed")
+}</code></pre>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <section>
+    <h2>4. <code>context.Context</code></h2>
+    <p>Context carries a deadline or cancellation signal across goroutine boundaries. Pass it as the first argument to every function that does I/O or spawns goroutines.</p>
+    <ul>
+      <li><code>context.WithTimeout(parent, d)</code> — cancels after duration <code>d</code></li>
+      <li><code>context.WithDeadline(parent, t)</code> — cancels at absolute time <code>t</code></li>
+      <li><code>context.WithCancel(parent)</code> — you call <code>cancel()</code> manually</li>
+    </ul>
+
+    <div class="anim-wrap">
+      <div id="actx-tree" class="ctx-tree"></div>
+      <div class="anim-msg" id="actx-msg">Press "Cancel" — watch cancellation propagate down the tree</div>
+      <div class="anim-controls">
+        <button onclick="animCtx.cancel()">Cancel WithTimeout</button>
+        <button onclick="animCtx.reset()">↺ Reset</button>
+      </div>
+    </div>
+
+    <pre><code>// Rule: always defer cancel() to release resources
+ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+defer cancel()
+
+// pass ctx to anything that should respect the deadline
+if err := db.QueryContext(ctx, query, args...); err != nil {
+    return err // returns context.DeadlineExceeded if timeout hit
+}
+
+// check cancellation inside a loop
+for {
+    select {
+    case &lt;-ctx.Done():
+        return ctx.Err() // context.Canceled or DeadlineExceeded
+    default:
+        // do work
+    }
+}</code></pre>
+
+    <h3>Real LP code — DB connection timeout</h3>
+    <p>In <code>lp-coupon-api/main.go</code>, startup waits at most 30s for the database to become healthy:</p>
+    <pre><code>ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+defer cancel()
+
+if err := app.db.WaitForConnection(ctx, 30*time.Second); err != nil {
+    return fmt.Errorf("database connection timeout: %w", err)
+}</code></pre>
+
+    <h3>Real LP code — Kafka consumer shutdown</h3>
+    <p>In <code>lp-coupon-consumer/main.go</code>, a dedicated goroutine cancels the context when a shutdown signal arrives:</p>
+    <pre><code>func (app *Application) consumeMessages(consumer *kafka.Consumer) {
+    ctx, cancel := context.WithCancel(context.Background())
+    defer cancel()
+
+    go func() {
+        &lt;-app.kafkaShutdownCh // wait for shutdown signal
+        cancel()              // cancel context → stops ReadMessage
+    }()
+
+    for {
+        msg, err := consumer.ReadMessage(ctx)
+        if err != nil {
+            if ctx.Err() != nil {
+                app.logger.Info("Kafka consumer stopped")
+                return // clean exit
+            }
+            app.logger.WithError(err).Error("Failed to read message")
+            continue
+        }
+        // handle msg...
+    }
+}</code></pre>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <section>
+    <h2>5. <code>sync.WaitGroup</code></h2>
+    <p>WaitGroup is a counter. <code>Add(n)</code> before spawning, <code>Done()</code> inside each goroutine (use <code>defer</code>), <code>Wait()</code> blocks until the counter reaches zero.</p>
+
+    <div class="anim-wrap">
+      <div class="anim-body" id="awg-stage"></div>
+      <div class="anim-msg"  id="awg-msg"></div>
+      <div class="anim-controls">
+        <button id="awg-play" onclick="animWG.play()">▶ Play</button>
+        <button onclick="animWG.next()">Next ▶</button>
+        <button onclick="animWG.reset()">↺ Reset</button>
+        <span class="anim-counter" id="awg-counter"></span>
+      </div>
+    </div>
+
+    <pre><code>var wg sync.WaitGroup
+
+for i := 0; i &lt; 3; i++ {
+    wg.Add(1)
+    go func(n int) {
+        defer wg.Done() // decrements when function returns
+        doWork(n)
+    }(i)
+}
+
+wg.Wait() // blocks until all 3 goroutines call Done()</code></pre>
+
+    <h3>Real LP code — watching two MongoDB change streams</h3>
+    <p>In <code>consent-consumer/db/db.go</code>, two goroutines watch separate collections; <code>wg.Wait()</code> keeps the process alive until both stop:</p>
+    <pre><code>wg := new(sync.WaitGroup)
+routineCtx, cancelFn := context.WithCancel(context.Background())
+defer cancelFn()
+
+wg.Add(2)
+go iterateChangeStream(routineCtx, wg, consentMasterStream, updateConsentMasterToSalesforce)
+go iterateChangeStream(routineCtx, wg, consentDetailStream, updateConsentDetailToSalesforce)
+
+wg.Wait()
+
+// each goroutine calls wg.Done() via defer:
+func iterateChangeStream(ctx context.Context, wg *sync.WaitGroup, stream *mongo.ChangeStream, updateFn func(bson.M)) {
+    defer wg.Done()
+    defer stream.Close(ctx)
+
+    for stream.Next(ctx) {
+        var data bson.M
+        if err := stream.Decode(&amp;data); err != nil { panic(err) }
+        updateFn(data)
+    }
+}</code></pre>
+
+    <div class="callout tip">
+      <strong>Tip:</strong> Always call <code>wg.Add(1)</code> in the goroutine's parent, <em>before</em> spawning — never inside the goroutine. If the goroutine runs too fast, <code>Wait()</code> could return before <code>Add</code> is called.
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <section>
+    <h2>6. <code>sync.Mutex</code></h2>
+    <p>Mutex is a mutual-exclusion lock. Only one goroutine holds the lock at a time. Use it when multiple goroutines write to the same variable.</p>
+
+    <div class="anim-wrap">
+      <div class="anim-body" id="amu-stage"></div>
+      <div class="anim-msg"  id="amu-msg"></div>
+      <div class="anim-controls">
+        <button id="amu-play" onclick="animMutex.play()">▶ Play</button>
+        <button onclick="animMutex.next()">Next ▶</button>
+        <button onclick="animMutex.reset()">↺ Reset</button>
+        <span class="anim-counter" id="amu-counter"></span>
+      </div>
+    </div>
+
+    <pre><code>var mu sync.Mutex
+var counter int
+
+func increment() {
+    mu.Lock()
+    defer mu.Unlock() // always use defer to avoid forgetting unlock
+    counter++
+}
+
+// For read-heavy data, use RWMutex:
+var rw sync.RWMutex
+
+func read() int {
+    rw.RLock()  // multiple goroutines can hold RLock simultaneously
+    defer rw.RUnlock()
+    return counter
+}
+
+func write(v int) {
+    rw.Lock()   // exclusive — blocks all readers and other writers
+    defer rw.Unlock()
+    counter = v
+}</code></pre>
+
+    <h3>Real LP code — thread-safe tracing spans</h3>
+    <p>In <code>lp-coupon-api/pkg/trace/trace.go</code>, multiple concurrent requests append spans to the same slice:</p>
+    <pre><code>type Tracer struct {
+    mu    sync.Mutex
+    spans []Span
+}
+
+func (t *Tracer) Start(method string) func(err error) {
+    start := time.Now()
+    return func(err error) {
+        span := Span{Method: method, Duration: time.Since(start)}
+        t.mu.Lock()
+        t.spans = append(t.spans, span) // safe: only one goroutine at a time
+        t.mu.Unlock()
+    }
+}
+
+func (t *Tracer) Spans() []Span {
+    t.mu.Lock()
+    defer t.mu.Unlock()
+    return append([]Span{}, t.spans...) // return a copy, not the live slice
+}</code></pre>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <section>
+    <h2>7. <code>sync.Once</code></h2>
+    <p><code>Once.Do(f)</code> calls <code>f</code> exactly once, no matter how many goroutines call it concurrently. After the first call, all subsequent calls are no-ops. Canonical use: lazy singleton initialisation.</p>
+
+    <div class="anim-wrap">
+      <div class="anim-body" id="aonce-stage" style="flex-wrap:wrap;gap:8px;align-items:center;"></div>
+      <div class="anim-msg"  id="aonce-msg"></div>
+      <div class="anim-controls">
+        <button onclick="animOnce.next()">Next ▶</button>
+        <button onclick="animOnce.reset()">↺ Reset</button>
+        <span class="anim-counter" id="aonce-counter"></span>
+      </div>
+    </div>
+
+    <pre><code>var (
+    instance *Client
+    once     sync.Once
+)
+
+func GetClient() *Client {
+    once.Do(func() {
+        instance = &amp;Client{} // runs exactly once
+    })
+    return instance // all callers get the same pointer
+}</code></pre>
+
+    <h3>Real LP code — MongoDB singleton</h3>
+    <p>In <code>lp-campaign-api/database/mongo.go</code>, many request handlers may call <code>Connect()</code> concurrently on startup:</p>
+    <pre><code>var (
+    instance *MongoInstance
+    once     sync.Once
+)
+
+func Connect() (*MongoInstance, error) {
+    once.Do(func() {
+        ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+        defer cancel()
+
+        client, err := mongo.Connect(ctx, options.Client().ApplyURI(mongodbUri))
+        if err != nil {
+            panic(fmt.Sprintf("Failed to connect to MongoDB: %s", err))
+        }
+        instance = &amp;MongoInstance{
+            Client: client,
+            DB:     client.Database(config.Env("MONGO_DB_NAME")),
+        }
+    })
+    return instance, nil
+}</code></pre>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <section>
+    <h2>8. Race Conditions &amp; <code>-race</code></h2>
+    <p>A data race happens when two goroutines access the same variable concurrently and at least one is a write, with no synchronisation. Races are silent and non-deterministic — they corrupt data, not crash consistently.</p>
+
+    <div class="anim-wrap">
+      <div id="arace-stage"></div>
+      <div class="race-banner" id="arace-banner">⚠ DATA RACE detected — counter=1 but expected 2. Run: <code>go test -race ./...</code></div>
+      <div class="anim-msg"  id="arace-msg"></div>
+      <div class="anim-controls">
+        <button onclick="animRace.next()">Next ▶</button>
+        <button onclick="animRace.reset()">↺ Reset</button>
+        <span class="anim-counter" id="arace-counter"></span>
+      </div>
+    </div>
+
+    <pre><code>// DATA RACE — counter is written by 100 goroutines simultaneously
+var counter int
+for i := 0; i &lt; 100; i++ {
+    go func() {
+        counter++ // read + write, not atomic
+    }()
+}</code></pre>
+
+    <p>Detect races with Go's built-in detector:</p>
+    <pre><code>go test -race ./...
+go run -race main.go</code></pre>
+
+    <div class="callout warning">
+      <strong>Always run <code>-race</code> in CI.</strong>
+      The race detector has ~5–10% CPU overhead — fine for tests, not for production builds.
+      Add it to your test pipeline: if a race is detected, the test fails with the two conflicting stack traces.
+    </div>
+
+    <p>Fix options:</p>
+    <ul>
+      <li>Use <code>sync.Mutex</code> — for structs and composite types (see §6)</li>
+      <li>Use <code>sync/atomic</code> — for simple integer counters</li>
+      <li>Channel ownership — have one goroutine own the data</li>
+    </ul>
+
+    <h3>Real LP code — atomic counters in the ETL processor</h3>
+    <p>In <code>lp-coupon-api/scripts/etl/shared/processor.go</code>, worker goroutines update shared counters. <code>atomic.AddInt64</code> is faster than a mutex for plain integers:</p>
+    <pre><code>var processedCount int64
+var failedCount    int64
+
+// inside each worker goroutine:
+if err != nil {
+    atomic.AddInt64(&amp;failedCount, int64(len(job.Records)))
+} else {
+    atomic.AddInt64(&amp;processedCount, int64(inserted))
+}
+
+// progress monitor goroutine reads them:
+processed := atomic.LoadInt64(&amp;processedCount)
+failed    := atomic.LoadInt64(&amp;failedCount)
+fmt.Printf("Progress: %d processed, %d failed\n", processed, failed)</code></pre>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <section>
+    <h2>9. Worker Pool Pattern</h2>
+    <p>Spawn N worker goroutines once, feed work through a channel, close the channel to signal "no more work". Workers drain the channel with <code>range</code> and exit naturally.</p>
+
+    <div class="anim-wrap">
+      <div id="awp-stage"></div>
+      <div class="anim-msg" id="awp-msg"></div>
+      <div class="anim-controls">
+        <button id="awp-play" onclick="animWorkerPool.play()">▶ Play</button>
+        <button onclick="animWorkerPool.next()">Next ▶</button>
+        <button onclick="animWorkerPool.reset()">↺ Reset</button>
+        <span class="anim-counter" id="awp-counter"></span>
+      </div>
+    </div>
+
+    <pre><code>func workerPool(numWorkers int, jobs []Job) {
+    jobChan := make(chan Job, numWorkers*2) // small buffer reduces blocking
+    var wg sync.WaitGroup
+
+    // spawn workers
+    for i := 0; i &lt; numWorkers; i++ {
+        wg.Add(1)
+        go func() {
+            defer wg.Done()
+            for job := range jobChan { // exits when jobChan is closed
+                process(job)
+            }
+        }()
+    }
+
+    // send work
+    for _, j := range jobs {
+        jobChan &lt;- j
+    }
+    close(jobChan) // signal: no more jobs
+
+    wg.Wait() // wait for all workers to finish
+}</code></pre>
+
+    <h3>Real LP code — parallel ETL batch processing</h3>
+    <p>The full pattern from <code>lp-coupon-api/scripts/etl/shared/processor.go</code> — workers process CSV batches in parallel, atomics track progress, a monitor goroutine prints stats every 10s:</p>
+    <pre><code>jobChan := make(chan BatchJob, cfg.NumWorkers*2)
+var wg sync.WaitGroup
+
+ctx, cancel := context.WithCancel(context.Background())
+defer cancel()
+
+// start workers
+for i := 0; i &lt; cfg.NumWorkers; i++ {
+    wg.Add(1)
+    go func(workerID int) {
+        defer wg.Done()
+        for job := range jobChan {
+            inserted, skipped, err := processBatch(db, job.Records, ...)
+            if err != nil {
+                atomic.AddInt64(&amp;failedCount, int64(len(job.Records)))
+            } else {
+                atomic.AddInt64(&amp;processedCount, int64(inserted))
+                atomic.AddInt64(&amp;skippedCount, int64(skipped))
+            }
+        }
+    }(i)
+}
+
+// progress monitor
+go func() {
+    ticker := time.NewTicker(10 * time.Second)
+    defer ticker.Stop()
+    for {
+        select {
+        case &lt;-ctx.Done():
+            return
+        case &lt;-ticker.C:
+            fmt.Printf("Progress: %d processed, %d failed\n",
+                atomic.LoadInt64(&amp;processedCount),
+                atomic.LoadInt64(&amp;failedCount))
+        }
+    }
+}()
+
+// feed work from CSV
+for _, batch := range batches {
+    jobChan &lt;- BatchJob{Records: batch}
+}
+close(jobChan)
+wg.Wait()</code></pre>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <section>
+    <h2>10. <code>errgroup</code></h2>
+    <p><code>golang.org/x/sync/errgroup</code> is a WaitGroup that also collects errors. <code>g.Wait()</code> returns the first non-nil error from any goroutine. Paired with <code>errgroup.WithContext</code>, it cancels the shared context as soon as any goroutine fails.</p>
+
+    <div class="anim-wrap">
+      <div id="aeg-stage"></div>
+      <div class="anim-msg" id="aeg-msg"></div>
+      <div class="anim-controls">
+        <button id="aeg-play" onclick="animErrgroup.play()">▶ Play</button>
+        <button onclick="animErrgroup.next()">Next ▶</button>
+        <button onclick="animErrgroup.reset()">↺ Reset</button>
+        <span class="anim-counter" id="aeg-counter"></span>
+      </div>
+    </div>
+
+    <pre><code>import "golang.org/x/sync/errgroup"
+
+g, ctx := errgroup.WithContext(context.Background())
+
+g.Go(func() error {
+    return fetchFromDB(ctx) // if this errors, ctx is cancelled
+})
+g.Go(func() error {
+    return fetchFromCache(ctx) // this will see ctx.Done() if DB call fails
+})
+
+if err := g.Wait(); err != nil {
+    return err // first non-nil error
+}</code></pre>
+
+    <h3>Comparison: WaitGroup vs errgroup for the ETL worker pool</h3>
+
+    <div class="split-code">
+      <div>
+        <div class="code-label">WaitGroup (current LP code)</div>
+        <pre><code>var wg sync.WaitGroup
+var firstErr error
+var mu sync.Mutex
+
+for i := 0; i &lt; N; i++ {
+    wg.Add(1)
+    go func() {
+        defer wg.Done()
+        if err := work(); err != nil {
+            mu.Lock()
+            if firstErr == nil {
+                firstErr = err
+            }
+            mu.Unlock()
+        }
+    }()
+}
+wg.Wait()
+return firstErr</code></pre>
+      </div>
+      <div>
+        <div class="code-label">errgroup (cleaner)</div>
+        <pre><code>g, ctx := errgroup.WithContext(ctx)
+
+for i := 0; i &lt; N; i++ {
+    g.Go(func() error {
+        return work(ctx)
+        // error auto-cancels ctx
+        // other workers see ctx.Done()
+    })
+}
+
+return g.Wait()
+// returns first error</code></pre>
+      </div>
+    </div>
+
+    <div class="callout tip">
+      <strong>When to prefer <code>errgroup</code>:</strong>
+      Use it whenever goroutines can return errors and you want "fail fast" semantics — cancel everything as soon as one fails.
+      WaitGroup is still fine when goroutines handle their own errors internally (e.g., logging and continuing).
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <div class="takeaways">
+    <h3>Key Takeaways</h3>
+    <ul>
+      <li>Goroutines are cheap (~2 KB); spawn freely, but always give them an exit path via <code>ctx.Done()</code> or channel close</li>
+      <li>Unbuffered channels synchronise two goroutines; buffered channels decouple them up to capacity</li>
+      <li><code>select</code> waits on multiple channels — use it for graceful shutdown, timeouts, and multiplexing</li>
+      <li>Pass <code>context.Context</code> as the first argument to every function doing I/O; always <code>defer cancel()</code></li>
+      <li><code>sync.WaitGroup</code> waits for N goroutines; <code>sync.Mutex</code> protects shared state; <code>sync.Once</code> initialises singletons</li>
+      <li>Run <code>go test -race ./...</code> before every merge touching concurrent code — the race detector is your safety net</li>
+      <li>Worker pool = buffered channel + N goroutines ranging over it + <code>close(ch)</code> to signal done</li>
+      <li>Prefer <code>errgroup</code> over raw WaitGroup when goroutines can fail and you want fail-fast cancellation</li>
+    </ul>
+  </div>
+
+</main>
+<script src="../js/nav.js"></script>
+<script>
+/* ─────────────────────────────────────────────────────────
+   Anim 1: Goroutine lifecycle
+───────────────────────────────────────────────────────── */
+const animGoroutine = (() => {
+  const STEPS = [
+    { states: ['idle','idle','idle'],       msg: 'main() ready — three goroutines about to be spawned' },
+    { states: ['running','idle','idle'],    msg: 'go G1() — G1 spawned and running concurrently' },
+    { states: ['running','running','idle'], msg: 'go G2() — G2 starts, runs in parallel with G1' },
+    { states: ['running','running','running'], msg: 'go G3() — all three running simultaneously' },
+    { states: ['blocked','running','running'], msg: 'G1 blocks on &lt;-ch (waiting for a value on the channel)' },
+    { states: ['blocked','done','running'], msg: 'G2 finishes its work' },
+    { states: ['running','done','running'], msg: 'G2 sent to channel — G1 unblocks and resumes' },
+    { states: ['done','done','done'],       msg: 'All goroutines complete ✓' },
+  ];
+  const LABELS = { idle: 'idle', running: 'running…', blocked: 'blocked ⏸', done: 'done ✓' };
+
+  let cur = 0, timer = null;
+
+  function draw() {
+    const step = STEPS[cur];
+    document.getElementById('ag-stage').innerHTML = step.states.map((s, i) => `
+      <div class="g-box g-${s}">
+        <div class="g-name">G${i+1}</div>
+        <div class="g-lbl">${LABELS[s]}</div>
+      </div>
+    `).join('') + `<div style="font-size:12px;color:#555;margin-left:4px;flex:1;min-width:180px;">${step.msg}</div>`;
+    document.getElementById('ag-counter').textContent = `${cur+1} / ${STEPS.length}`;
+  }
+
+  function advance() {
+    if (cur < STEPS.length - 1) cur++;
+    draw();
+    if (cur === STEPS.length - 1 && timer) { clearInterval(timer); timer = null; document.getElementById('ag-play').textContent = '▶ Play'; }
+  }
+
+  return {
+    play() {
+      if (timer) { clearInterval(timer); timer = null; document.getElementById('ag-play').textContent = '▶ Play'; return; }
+      if (cur === STEPS.length - 1) cur = 0;
+      draw();
+      document.getElementById('ag-play').textContent = '⏸ Pause';
+      timer = setInterval(advance, 950);
+    },
+    next()  { if (timer) { clearInterval(timer); timer = null; document.getElementById('ag-play').textContent = '▶ Play'; } advance(); },
+    reset() { if (timer) { clearInterval(timer); timer = null; document.getElementById('ag-play').textContent = '▶ Play'; } cur = 0; draw(); },
+    init()  { draw(); }
+  };
+})();
+
+/* ─────────────────────────────────────────────────────────
+   Anim 2: Channel buffer fill / drain
+───────────────────────────────────────────────────────── */
+const animChannel = (() => {
+  let buffered = true;
+
+  // each step: { senderState, slots (array of true/false), receiverState, msg }
+  function buildSteps(cap) {
+    if (cap === 0) {
+      return [
+        { sender:'active',  slots:[],    receiver:'idle',   arrowL:false, arrowR:false, msg:'Unbuffered — sender ready to send' },
+        { sender:'blocked', slots:[],    receiver:'idle',   arrowL:false, arrowR:false, msg:'Sender BLOCKS — no buffer, needs a receiver to be ready simultaneously' },
+        { sender:'blocked', slots:[],    receiver:'active', arrowL:false, arrowR:false, msg:'Receiver ready — rendezvous about to happen' },
+        { sender:'active',  slots:[],    receiver:'active', arrowL:true,  arrowR:true,  msg:'Value transferred — sender unblocks, both proceed' },
+      ];
+    }
+    return [
+      { sender:'active',  slots:[false,false,false], receiver:'idle',   arrowL:false, arrowR:false, msg:'Buffer empty (cap=3) — sender ready' },
+      { sender:'active',  slots:[true, false,false], receiver:'idle',   arrowL:true,  arrowR:false, msg:'Sender sends item 1 → fills slot 1' },
+      { sender:'active',  slots:[true, true, false], receiver:'idle',   arrowL:true,  arrowR:false, msg:'Sender sends item 2 → fills slot 2' },
+      { sender:'active',  slots:[true, true, true],  receiver:'idle',   arrowL:true,  arrowR:false, msg:'Sender sends item 3 → buffer full' },
+      { sender:'blocked', slots:[true, true, true],  receiver:'idle',   arrowL:false, arrowR:false, msg:'Sender BLOCKS — buffer full, no receiver' },
+      { sender:'active',  slots:[false,true, true],  receiver:'active', arrowL:false, arrowR:true,  msg:'Receiver reads item 1 → sender unblocks immediately' },
+      { sender:'active',  slots:[true, true, true],  receiver:'active', arrowL:true,  arrowR:true,  msg:'Sender sends item 4, receiver reads item 2' },
+      { sender:'active',  slots:[true, false,true],  receiver:'active', arrowL:false, arrowR:true,  msg:'Receiver reads another item' },
+      { sender:'active',  slots:[false,false,false], receiver:'active', arrowL:false, arrowR:true,  msg:'Buffer drained — receiver would block next' },
+    ];
+  }
+
+  let steps = buildSteps(3), cur = 0;
+
+  function renderSlots(slots, cap) {
+    if (cap === 0) {
+      return `<div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
+        <div class="ch-slot unb" style="width:80px;height:30px;font-size:9px;">(no buffer)</div>
+        <div class="ch-label">chan T</div></div>`;
+    }
+    return `<div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
+      <div class="ch-slots">${slots.map((f,i) => `<div class="ch-slot${f?' filled':''}">
+        ${f ? `<b>${i+1}</b>` : ''}</div>`).join('')}</div>
+      <div class="ch-label">chan T (cap=${slots.length})</div></div>`;
+  }
+
+  function draw() {
+    const s = steps[cur];
+    const cap = buffered ? 3 : 0;
+    document.getElementById('ach-row').innerHTML = `
+      <div class="ch-actor ${s.sender}">sender</div>
+      <div class="ch-arrow${s.arrowL?' live':''}">→</div>
+      ${renderSlots(s.slots, cap)}
+      <div class="ch-arrow${s.arrowR?' live':''}">→</div>
+      <div class="ch-actor ${s.receiver}">receiver</div>
+    `;
+    document.getElementById('ach-msg').textContent = s.msg;
+    document.getElementById('ach-counter').textContent = `${cur+1} / ${steps.length}`;
+  }
+
+  return {
+    next()  { cur = Math.min(cur+1, steps.length-1); draw(); },
+    reset() { cur = 0; draw(); },
+    toggleBuffered(val) {
+      buffered = val;
+      steps = buildSteps(val ? 3 : 0);
+      cur = 0; draw();
+    },
+    init()  { draw(); }
+  };
+})();
+
+/* ─────────────────────────────────────────────────────────
+   Anim 3: select multiplexer
+───────────────────────────────────────────────────────── */
+const animSelect = (() => {
+  let timer = null;
+  let lastFired = -1;
+
+  function draw(fired) { // fired = 0, 1, or -1 for none
+    const channels = ['ch1', 'ch2'];
+    const diag = document.getElementById('asel-diagram');
+    diag.innerHTML = `
+      <div class="sel-channels">
+        ${channels.map((c,i) => `<div class="sel-ch${fired===i?' fired':''}" id="asel-ch${i}">${c}</div>`).join('')}
+      </div>
+      <div class="sel-arrow${fired>=0?' live':''}">→</div>
+      <div class="sel-box">
+        <div>select {</div>
+        <div class="sel-case${fired===0?' active':''}"> &nbsp;case &lt;-ch1:</div>
+        <div class="sel-case${fired===1?' active':''}"> &nbsp;case &lt;-ch2:</div>
+        <div>}</div>
+      </div>
+    `;
+    if (fired >= 0) {
+      document.getElementById('asel-msg').textContent = `${channels[fired]} ready first → case ${channels[fired]} fires`;
+    }
+  }
+
+  function tick() {
+    let next;
+    do { next = Math.random() < 0.5 ? 0 : 1; } while (next === lastFired);
+    lastFired = next;
+    draw(next);
+  }
+
+  return {
+    toggle() {
+      if (timer) {
+        clearInterval(timer);
+        timer = null;
+        document.getElementById('asel-play').textContent = '▶ Play';
+        draw(-1);
+        document.getElementById('asel-msg').textContent = 'Press Play — watch which channel fires each round';
+      } else {
+        document.getElementById('asel-play').textContent = '⏸ Pause';
+        tick();
+        timer = setInterval(tick, 1600);
+      }
+    },
+    reset() {
+      if (timer) { clearInterval(timer); timer = null; }
+      document.getElementById('asel-play').textContent = '▶ Play';
+      document.getElementById('asel-msg').textContent = 'Press Play — watch which channel fires each round';
+      draw(-1);
+    },
+    init() { draw(-1); }
+  };
+})();
+
+/* ─────────────────────────────────────────────────────────
+   Anim 4: Context cancellation tree
+───────────────────────────────────────────────────────── */
+const animCtx = (() => {
+  const NODES = [
+    { id: 'bg',   label: 'context.Background()', parent: null },
+    { id: 'to',   label: 'WithTimeout(30s)',      parent: 'bg' },
+    { id: 'ca',   label: 'WithCancel (req A)',     parent: 'to' },
+    { id: 'cb',   label: 'WithCancel (req B)',     parent: 'to' },
+  ];
+  let cancelled = new Set();
+
+  function render() {
+    const tree = document.getElementById('actx-tree');
+    function nodeHtml(id) {
+      const n = NODES.find(x => x.id === id);
+      const isCancelled = cancelled.has(id);
+      const children = NODES.filter(x => x.parent === id);
+      return `<div>
+        <div class="ctx-row">
+          ${n.parent ? '<span class="ctx-line">└─</span>' : ''}
+          <div class="ctx-node${isCancelled?' cancelled':''}" id="ctx-${id}">
+            ${isCancelled ? '✕ ' : ''}${n.label}
+          </div>
+        </div>
+        ${children.length ? `<div class="ctx-children">${children.map(c => nodeHtml(c.id)).join('')}</div>` : ''}
+      </div>`;
+    }
+    tree.innerHTML = nodeHtml('bg');
+  }
+
+  function cancelSubtree(id, delay) {
+    setTimeout(() => {
+      cancelled.add(id);
+      render();
+      const children = NODES.filter(n => n.parent === id);
+      children.forEach(c => cancelSubtree(c.id, 300));
+      if (id === 'to') {
+        document.getElementById('actx-msg').textContent =
+          'WithTimeout cancelled — both child contexts receive ctx.Done() ✓';
+      }
+    }, delay);
+  }
+
+  return {
+    cancel() {
+      if (cancelled.size > 0) return;
+      document.getElementById('actx-msg').textContent = 'Cancellation propagating…';
+      cancelSubtree('to', 0);
+    },
+    reset() {
+      cancelled.clear();
+      render();
+      document.getElementById('actx-msg').textContent = 'Press "Cancel" — watch cancellation propagate down the tree';
+    },
+    init() { render(); }
+  };
+})();
+
+/* ─────────────────────────────────────────────────────────
+   Anim 5: sync.WaitGroup
+───────────────────────────────────────────────────────── */
+const animWG = (() => {
+  const STEPS = [
+    { ctr: 0, gs: ['idle','idle','idle'],          main: 'idle',     msg: 'counter=0 — no goroutines added yet; wg.Wait() not called' },
+    { ctr: 1, gs: ['running','idle','idle'],        main: 'idle',     msg: 'wg.Add(1) → G1 spawned and running; counter=1' },
+    { ctr: 2, gs: ['running','running','idle'],     main: 'idle',     msg: 'wg.Add(1) → G2 spawned; counter=2' },
+    { ctr: 3, gs: ['running','running','running'],  main: 'idle',     msg: 'wg.Add(1) → G3 spawned; counter=3 — all three running in parallel' },
+    { ctr: 3, gs: ['running','running','running'],  main: 'blocking', msg: 'wg.Wait() called — main BLOCKS until counter reaches 0' },
+    { ctr: 1, gs: ['done','done','running'],        main: 'blocking', msg: 'G1 Done() → counter=2; G2 Done() → counter=1; main still blocked' },
+    { ctr: 0, gs: ['done','done','done'],           main: 'done',     msg: 'G3 Done() → counter=0 — main UNBLOCKS and continues ✓' },
+  ];
+  const GLABELS = { idle: 'idle', running: 'running…', done: 'done ✓' };
+  const MLABELS = { idle: 'main (not yet)', blocking: 'wg.Wait() ⏸', done: 'main continues ✓' };
+  const MCLASS  = { idle: 'g-idle', blocking: 'g-blocked', done: 'g-done' };
+
+  let cur = 0, timer = null;
+
+  function draw() {
+    const s = STEPS[cur];
+    const cClass = s.ctr === 0 ? 'zero' : s.ctr > 0 ? 'nonzero' : '';
+    document.getElementById('awg-stage').innerHTML =
+      `<div class="wg-counter ${cClass}">${s.ctr}<div class="wg-lbl">WaitGroup</div></div>` +
+      s.gs.map((st, i) =>
+        `<div class="g-box g-${st}"><div class="g-name">G${i+1}</div><div class="g-lbl">${GLABELS[st]}</div></div>`
+      ).join('') +
+      `<div class="g-box ${MCLASS[s.main]}" style="min-width:110px;">
+        <div class="g-name" style="font-size:11px;">main</div>
+        <div class="g-lbl">${MLABELS[s.main]}</div>
+      </div>`;
+    document.getElementById('awg-msg').textContent = s.msg;
+    document.getElementById('awg-counter').textContent = `${cur+1} / ${STEPS.length}`;
+  }
+
+  function advance() {
+    if (cur < STEPS.length - 1) cur++;
+    draw();
+    if (cur === STEPS.length - 1 && timer) { clearInterval(timer); timer = null; document.getElementById('awg-play').textContent = '▶ Play'; }
+  }
+
+  return {
+    play()  { if (timer) { clearInterval(timer); timer = null; document.getElementById('awg-play').textContent = '▶ Play'; return; }
+               if (cur === STEPS.length - 1) cur = 0; draw();
+               document.getElementById('awg-play').textContent = '⏸ Pause';
+               timer = setInterval(advance, 1100); },
+    next()  { if (timer) { clearInterval(timer); timer = null; document.getElementById('awg-play').textContent = '▶ Play'; } advance(); },
+    reset() { if (timer) { clearInterval(timer); timer = null; document.getElementById('awg-play').textContent = '▶ Play'; } cur = 0; draw(); },
+    init()  { draw(); }
+  };
+})();
+
+/* ─────────────────────────────────────────────────────────
+   Anim 6: sync.Mutex
+───────────────────────────────────────────────────────── */
+const animMutex = (() => {
+  const STEPS = [
+    { ctr:0, gs:['wanting','wanting','wanting'], lock:{free:true,  holder:''  }, msg:'counter=0 — G1, G2, G3 all contend for the lock simultaneously' },
+    { ctr:0, gs:['holding','wanting','wanting'], lock:{free:false, holder:'G1'}, msg:'G1 acquires lock 🔒 — G2 and G3 must wait (they block on mu.Lock())' },
+    { ctr:1, gs:['holding','wanting','wanting'], lock:{free:false, holder:'G1'}, msg:'G1 in critical section: counter++ → counter=1' },
+    { ctr:1, gs:['done',   'wanting','wanting'], lock:{free:true,  holder:''  }, msg:'G1 calls Unlock() — lock released; counter=1' },
+    { ctr:1, gs:['done',   'holding','wanting'], lock:{free:false, holder:'G2'}, msg:'G2 acquires lock 🔒 — G3 still waiting' },
+    { ctr:2, gs:['done',   'done',   'wanting'], lock:{free:true,  holder:''  }, msg:'G2: counter++ → 2, then Unlock()' },
+    { ctr:2, gs:['done',   'done',   'holding'], lock:{free:false, holder:'G3'}, msg:'G3 acquires lock 🔒' },
+    { ctr:3, gs:['done',   'done',   'done'],    lock:{free:true,  holder:''  }, msg:'G3: counter++ → 3, Unlock() — all done safely, counter=3 ✓' },
+  ];
+  const GLABELS = { wanting:'waiting for lock…', holding:'in critical §', done:'done ✓' };
+  const GCLASS  = { wanting:'g-wanting', holding:'g-holding', done:'g-done' };
+
+  let cur = 0, timer = null;
+
+  function draw() {
+    const s = STEPS[cur];
+    document.getElementById('amu-stage').innerHTML =
+      s.gs.map((st, i) =>
+        `<div class="g-box ${GCLASS[st]}"><div class="g-name">G${i+1}</div><div class="g-lbl">${GLABELS[st]}</div></div>`
+      ).join('') +
+      `<div class="mu-lock ${s.lock.free ? 'free' : 'locked'}">
+        <div>${s.lock.free ? '🔓 free' : '🔒 locked'}</div>
+        <div class="mu-holder">${s.lock.holder ? 'held by ' + s.lock.holder : '&nbsp;'}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:3px;">
+        <div style="font-size:10px;color:#888;font-family:monospace;">counter</div>
+        <div class="mu-counter-badge">${s.ctr}</div>
+      </div>`;
+    document.getElementById('amu-msg').textContent = s.msg;
+    document.getElementById('amu-counter').textContent = `${cur+1} / ${STEPS.length}`;
+  }
+
+  function advance() {
+    if (cur < STEPS.length - 1) cur++;
+    draw();
+    if (cur === STEPS.length - 1 && timer) { clearInterval(timer); timer = null; document.getElementById('amu-play').textContent = '▶ Play'; }
+  }
+
+  return {
+    play()  { if (timer) { clearInterval(timer); timer = null; document.getElementById('amu-play').textContent = '▶ Play'; return; }
+               if (cur === STEPS.length - 1) cur = 0; draw();
+               document.getElementById('amu-play').textContent = '⏸ Pause';
+               timer = setInterval(advance, 1100); },
+    next()  { if (timer) { clearInterval(timer); timer = null; document.getElementById('amu-play').textContent = '▶ Play'; } advance(); },
+    reset() { if (timer) { clearInterval(timer); timer = null; document.getElementById('amu-play').textContent = '▶ Play'; } cur = 0; draw(); },
+    init()  { draw(); }
+  };
+})();
+
+/* ─────────────────────────────────────────────────────────
+   Anim 7: sync.Once
+───────────────────────────────────────────────────────── */
+const animOnce = (() => {
+  const STEPS = [
+    { gs:['calling','calling','calling','calling','calling'], initBox:'pending',
+      msg:'5 goroutines all call once.Do(init) concurrently — only one will execute init()' },
+    { gs:['running','calling','calling','calling','calling'], initBox:'active',
+      msg:'G1 wins the race — runs init() function; others block waiting for once to finish' },
+    { gs:['got','calling','calling','calling','calling'],     initBox:'done',
+      msg:'G1 returns instance; once marks itself complete — init() will never run again' },
+    { gs:['got','skipped','skipped','skipped','skipped'],     initBox:'done',
+      msg:'G2–G5 unblock — their Do() calls return immediately without running init()' },
+    { gs:['got','got','got','got','got'],                     initBox:'done',
+      msg:'All 5 goroutines return the same instance pointer — singleton guaranteed ✓' },
+  ];
+  const GLABELS = { calling:'once.Do(init)', running:'running init!', got:'got instance ✓', skipped:'skipped init' };
+  const GCLASS  = { calling:'g-calling', running:'g-running', got:'g-gotinst', skipped:'g-skipped' };
+  const IBOX    = { pending:'not run yet', active:'⚡ running…', done:'✓ done' };
+
+  let cur = 0;
+
+  function draw() {
+    const s = STEPS[cur];
+    document.getElementById('aonce-stage').innerHTML =
+      s.gs.map((st, i) =>
+        `<div class="g-box ${GCLASS[st]}"><div class="g-name">G${i+1}</div><div class="g-lbl">${GLABELS[st]}</div></div>`
+      ).join('') +
+      `<div style="font-size:20px;color:#bbb;align-self:center;">→</div>
+       <div class="once-init-box ${s.initBox}">
+         <div style="font-weight:700;">once.Do</div>
+         <div class="once-lbl">${IBOX[s.initBox]}</div>
+       </div>`;
+    document.getElementById('aonce-msg').textContent = s.msg;
+    document.getElementById('aonce-counter').textContent = `${cur+1} / ${STEPS.length}`;
+  }
+
+  return {
+    next()  { if (cur < STEPS.length - 1) cur++; draw(); },
+    reset() { cur = 0; draw(); },
+    init()  { draw(); }
+  };
+})();
+
+/* ─────────────────────────────────────────────────────────
+   Anim 8: Race Conditions
+───────────────────────────────────────────────────────── */
+const animRace = (() => {
+  const STEPS = [
+    { ctr:0, cClass:'',       g1:{read:'',   add:'',    write:'' }, g2:{read:'',   add:'',    write:'' },
+      msg:'counter=0 — G1 and G2 both about to execute counter++ (read → add 1 → write)' },
+    { ctr:0, cClass:'racing', g1:{read:'read',add:'',   write:'' }, g2:{read:'',   add:'',    write:'' },
+      msg:'G1 reads counter=0 into its local register' },
+    { ctr:0, cClass:'racing', g1:{read:'done',add:'read',write:''}, g2:{read:'read',add:'',   write:'' },
+      msg:'G2 reads counter=0 — BEFORE G1 wrote back! Both goroutines hold stale value 0' },
+    { ctr:1, cClass:'racing', g1:{read:'done',add:'done',write:'write'}, g2:{read:'done',add:'read',write:'' },
+      msg:'G1 adds 1 and writes counter=1' },
+    { ctr:1, cClass:'racing', g1:{read:'done',add:'done',write:'done'}, g2:{read:'done',add:'done',write:'write'},
+      msg:"G2 adds 1 to its stale 0 and writes counter=1 — OVERWRITES G1's result (lost write!)" },
+    { ctr:1, cClass:'racing', g1:{read:'done',add:'done',write:'done'}, g2:{read:'done',add:'done',write:'done'},
+      msg:'Final counter=1, expected 2 — the race silently corrupted the result' },
+  ];
+
+  const OP_CLASS = { '':'', read:'read', write:'write', done:'done' };
+  const OP_LABEL = { read:'READ =0', add:'ADD 1', write:'WRITE =1' };
+
+  function lane(name, ops) {
+    return `<div class="race-lane">
+      <div class="race-lane-label">${name}</div>
+      ${['read','add','write'].map(op =>
+        `<div class="race-op ${OP_CLASS[ops[op]]}">${OP_LABEL[op]}</div>`
+      ).join('')}
+    </div>`;
+  }
+
+  let cur = 0;
+
+  function draw() {
+    const s = STEPS[cur];
+    const corrupt = cur >= 5 ? ' corrupt' : '';
+    document.getElementById('arace-stage').innerHTML = `
+      <div class="race-layout">
+        ${lane('G1', s.g1)}
+        <div style="font-size:22px;color:#bbb;align-self:center;">⇆</div>
+        <div class="race-counter-box ${s.cClass}">
+          <div class="rc-label">counter</div>
+          <div class="rc-value${corrupt}">${s.ctr}</div>
+        </div>
+        <div style="font-size:22px;color:#bbb;align-self:center;">⇆</div>
+        ${lane('G2', s.g2)}
+      </div>`;
+    document.getElementById('arace-banner').className = 'race-banner' + (cur >= 5 ? ' visible' : '');
+    document.getElementById('arace-msg').textContent = s.msg;
+    document.getElementById('arace-counter').textContent = `${cur+1} / ${STEPS.length}`;
+  }
+
+  return {
+    next()  { if (cur < STEPS.length - 1) cur++; draw(); },
+    reset() { cur = 0; draw(); },
+    init()  { draw(); }
+  };
+})();
+
+/* ─────────────────────────────────────────────────────────
+   Anim 9: Worker Pool Pattern
+───────────────────────────────────────────────────────── */
+const animWorkerPool = (() => {
+  const STEPS = [
+    { jobs:['empty','empty','empty','empty','empty'],
+      workers:[{st:'idle',j:''},{st:'idle',j:''},{st:'idle',j:''}],
+      closed:false, wait:'idle',
+      msg:'3 workers spawned and idle; job channel empty — main is about to feed jobs' },
+    { jobs:['queued','queued','queued','empty','empty'],
+      workers:[{st:'idle',j:''},{st:'idle',j:''},{st:'idle',j:''}],
+      closed:false, wait:'blocking',
+      msg:'J1,J2,J3 sent into jobChan (buffer fills); wg.Wait() now blocking in main' },
+    { jobs:['inflight','inflight','inflight','empty','empty'],
+      workers:[{st:'busy',j:'J1'},{st:'busy',j:'J2'},{st:'busy',j:'J3'}],
+      closed:false, wait:'blocking',
+      msg:'All 3 workers pick up jobs from the channel — running in parallel' },
+    { jobs:['done','inflight','inflight','queued','queued'],
+      workers:[{st:'busy',j:'J4'},{st:'busy',j:'J2'},{st:'busy',j:'J3'}],
+      closed:false, wait:'blocking',
+      msg:'W1 finishes J1, immediately picks up J4; J4,J5 queued' },
+    { jobs:['done','done','inflight','inflight','inflight'],
+      workers:[{st:'busy',j:'J4'},{st:'busy',j:'J5'},{st:'idle',j:''}],
+      closed:false, wait:'blocking',
+      msg:'W2 finishes J2 → picks up J5; W3 finishes J3, nothing left — idles' },
+    { jobs:['done','done','done','inflight','inflight'],
+      workers:[{st:'busy',j:'J4'},{st:'busy',j:'J5'},{st:'idle',j:''}],
+      closed:true, wait:'blocking',
+      msg:'close(jobChan) — W3 sees channel closed and exits its range loop' },
+    { jobs:['done','done','done','done','done'],
+      workers:[{st:'done',j:''},{st:'done',j:''},{st:'done',j:''}],
+      closed:true, wait:'done',
+      msg:'W1 and W2 finish; all 3 workers call Done() — wg.Wait() unblocks ✓' },
+  ];
+
+  let cur = 0, timer = null;
+
+  function draw() {
+    const s = STEPS[cur];
+    const jobsHtml = s.jobs.map((st, i) =>
+      `<div class="wp-job ${st !== 'empty' ? st : ''}">${st !== 'empty' ? `J${i+1}` : `<span style="color:#ddd">J${i+1}</span>`}</div>`
+    ).join('') + (s.closed ? `<div class="wp-job closed">close(ch)</div>` : '');
+
+    const workersHtml = s.workers.map((w, i) =>
+      `<div class="wp-worker ${w.st}">
+        <div class="wp-wname">W${i+1}</div>
+        <div class="wp-wlbl">${w.st==='busy'?'processing '+w.j : w.st==='done'?'done ✓':'idle'}</div>
+      </div>`
+    ).join('');
+
+    const waitHtml = `<div class="wp-wait-box ${s.wait !== 'idle' ? s.wait : ''}">${
+      s.wait==='idle' ? 'wg.Wait() (not yet)' :
+      s.wait==='blocking' ? 'wg.Wait() ⏸ blocking' : 'wg.Wait() done ✓'
+    }</div>`;
+
+    document.getElementById('awp-stage').innerHTML = `
+      <div class="wp-layout">
+        <div class="wp-row"><div class="wp-label">job channel:</div>${jobsHtml}</div>
+        <div class="wp-row"><div class="wp-label">workers:</div>${workersHtml}</div>
+        <div class="wp-row"><div class="wp-label">main:</div>${waitHtml}</div>
+      </div>`;
+    document.getElementById('awp-msg').textContent = s.msg;
+    document.getElementById('awp-counter').textContent = `${cur+1} / ${STEPS.length}`;
+  }
+
+  function advance() {
+    if (cur < STEPS.length - 1) cur++;
+    draw();
+    if (cur === STEPS.length - 1 && timer) { clearInterval(timer); timer = null; document.getElementById('awp-play').textContent = '▶ Play'; }
+  }
+
+  return {
+    play()  { if (timer) { clearInterval(timer); timer = null; document.getElementById('awp-play').textContent = '▶ Play'; return; }
+               if (cur === STEPS.length - 1) cur = 0; draw();
+               document.getElementById('awp-play').textContent = '⏸ Pause';
+               timer = setInterval(advance, 1200); },
+    next()  { if (timer) { clearInterval(timer); timer = null; document.getElementById('awp-play').textContent = '▶ Play'; } advance(); },
+    reset() { if (timer) { clearInterval(timer); timer = null; document.getElementById('awp-play').textContent = '▶ Play'; } cur = 0; draw(); },
+    init()  { draw(); }
+  };
+})();
+
+/* ─────────────────────────────────────────────────────────
+   Anim 10: errgroup
+───────────────────────────────────────────────────────── */
+const animErrgroup = (() => {
+  const STEPS = [
+    { ctx:'live',
+      gs:[{n:'F1',st:'running'},{n:'F2',st:'running'},{n:'F3',st:'running'}],
+      result:'waiting',
+      msg:'errgroup.WithContext — shared ctx live; F1, F2, F3 all running concurrently' },
+    { ctx:'live',
+      gs:[{n:'F1',st:'running'},{n:'F2',st:'errored'},{n:'F3',st:'running'}],
+      result:'waiting',
+      msg:'F2 returns an error → errgroup internally calls cancel() on the shared context' },
+    { ctx:'cancelled',
+      gs:[{n:'F1',st:'running'},{n:'F2',st:'errored'},{n:'F3',st:'running'}],
+      result:'waiting',
+      msg:'ctx cancelled — F1 and F3 will detect <-ctx.Done() on their next select or I/O call' },
+    { ctx:'cancelled',
+      gs:[{n:'F1',st:'stopped'},{n:'F2',st:'errored'},{n:'F3',st:'stopped'}],
+      result:'waiting',
+      msg:'F1 and F3 return ctx.Err() — errgroup waits for all goroutines to finish' },
+    { ctx:'cancelled',
+      gs:[{n:'F1',st:'exited'},{n:'F2',st:'errored'},{n:'F3',st:'exited'}],
+      result:'error',
+      msg:'g.Wait() returns F2\'s error — first non-nil error from any goroutine ✓' },
+  ];
+  const GLABELS = { running:'running…', errored:'error! ✕', stopped:'ctx.Done() ⏸', exited:'returned nil' };
+
+  let cur = 0, timer = null;
+
+  function draw() {
+    const s = STEPS[cur];
+    document.getElementById('aeg-stage').innerHTML = `
+      <div class="eg-layout">
+        <div class="eg-ctx-row">
+          <div class="eg-ctx-label">ctx:</div>
+          <div class="eg-ctx ${s.ctx==='cancelled'?'cancelled':''}">${s.ctx==='live'?'✓ live':'✕ cancelled'}</div>
+        </div>
+        <div class="eg-ctx-row">
+          <div class="eg-ctx-label">g.Go:</div>
+          <div class="eg-goroutines">${s.gs.map(g =>
+            `<div class="eg-goroutine ${g.st}">
+              <div class="eg-gname">${g.n}</div>
+              <div class="eg-glbl">${GLABELS[g.st]}</div>
+            </div>`
+          ).join('')}</div>
+        </div>
+        <div class="eg-ctx-row">
+          <div class="eg-ctx-label">result:</div>
+          <div class="eg-result ${s.result==='error'?'has-error':''}">${
+            s.result==='waiting' ? 'g.Wait() — pending…' :
+            s.result==='error'   ? 'err = "fetch failed"' : 'err = nil'
+          }</div>
+        </div>
+      </div>`;
+    document.getElementById('aeg-msg').textContent = s.msg;
+    document.getElementById('aeg-counter').textContent = `${cur+1} / ${STEPS.length}`;
+  }
+
+  function advance() {
+    if (cur < STEPS.length - 1) cur++;
+    draw();
+    if (cur === STEPS.length - 1 && timer) { clearInterval(timer); timer = null; document.getElementById('aeg-play').textContent = '▶ Play'; }
+  }
+
+  return {
+    play()  { if (timer) { clearInterval(timer); timer = null; document.getElementById('aeg-play').textContent = '▶ Play'; return; }
+               if (cur === STEPS.length - 1) cur = 0; draw();
+               document.getElementById('aeg-play').textContent = '⏸ Pause';
+               timer = setInterval(advance, 1200); },
+    next()  { if (timer) { clearInterval(timer); timer = null; document.getElementById('aeg-play').textContent = '▶ Play'; } advance(); },
+    reset() { if (timer) { clearInterval(timer); timer = null; document.getElementById('aeg-play').textContent = '▶ Play'; } cur = 0; draw(); },
+    init()  { draw(); }
+  };
+})();
+
+/* ── boot ── */
+document.addEventListener('DOMContentLoaded', () => {
+  animGoroutine.init();
+  animChannel.init();
+  animSelect.init();
+  animCtx.init();
+  animWG.init();
+  animMutex.init();
+  animOnce.init();
+  animRace.init();
+  animWorkerPool.init();
+  animErrgroup.init();
+});
+</script>
+</body>
+</html>

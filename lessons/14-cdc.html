@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>14 · Change Data Capture — LP Go Learning</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    /* ── static pipeline diagram ── */
+    .pipe-diagram {
+      display: flex;
+      flex-direction: column;
+      font-family: 'SFMono-Regular', Consolas, monospace;
+      font-size: 0.82rem;
+      margin-bottom: 0.75rem;
+    }
+    .pipe-section-label {
+      text-align: center;
+      font-size: 0.67rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #94a3b8;
+      margin: 0.6rem 0 0.2rem;
+    }
+    .pipe-section-label:first-child { margin-top: 0; }
+    .pipe-box {
+      padding: 0.4rem 0.7rem;
+      border: 1px solid #e2e8f0;
+      border-left: 4px solid transparent;
+      border-radius: 4px;
+    }
+    .pipe-source { border-left-color: #3b82f6; background: #eff6ff; }
+    .pipe-broker { border-left-color: #7c3aed; background: #f5f3ff; }
+    .pipe-sink   { border-left-color: #22c55e; background: #f0fdf4; }
+    .pipe-box-title { font-weight: 600; color: #1e293b; display: block; }
+    .pipe-box-desc  { color: #64748b; font-size: 0.77rem; display: block; }
+    .pipe-box-sub   { color: #64748b; font-size: 0.75rem; display: block; padding-left: 0.75rem; margin-top: 0.1rem; }
+    .pipe-connector {
+      text-align: center;
+      color: #94a3b8;
+      font-size: 0.82rem;
+      padding: 0.1rem 0;
+      line-height: 1.4;
+    }
+
+    /* ── animation primitives (at-least-once) ── */
+    .anim-wrap {
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      background: #f8fafc;
+      padding: 1rem 1.25rem;
+      margin-bottom: 0.75rem;
+      font-family: 'SFMono-Regular', Consolas, monospace;
+      font-size: 0.82rem;
+      line-height: 1.6;
+    }
+    .anim-controls {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+    }
+    .anim-controls button {
+      padding: 0.3rem 0.75rem;
+      border: 1px solid #cbd5e1;
+      border-radius: 5px;
+      background: #fff;
+      cursor: pointer;
+      font-size: 0.8rem;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .anim-controls button:hover { background: #f1f5f9; border-color: #94a3b8; }
+    .anim-controls button:disabled { opacity: 0.4; cursor: default; }
+    .anim-msg {
+      font-size: 0.78rem;
+      color: #64748b;
+      font-style: italic;
+    }
+    .anim-step {
+      padding: 0.2rem 0.5rem;
+      border-left: 3px solid transparent;
+      border-radius: 3px;
+      transition: background 0.3s, border-left-color 0.3s, color 0.3s, opacity 0.3s;
+      white-space: pre;
+    }
+    .anim-step.pending  { opacity: 0.32; }
+    .anim-step.active   { border-left-color: #3b82f6; background: #eff6ff; opacity: 1;
+                          animation: step-glow 0.55s ease-out; }
+    .anim-step.done     { border-left-color: #22c55e; background: #f0fdf4; color: #374151; opacity: 1; }
+    .anim-step.done .step-tick { display: inline; }
+    .step-tick { display: none; color: #16a34a; margin-left: 0.4rem; }
+    .tree-root {
+      font-weight: 600;
+      color: #1e293b;
+      padding: 0.2rem 0.5rem;
+      margin-bottom: 0.15rem;
+    }
+
+    @keyframes step-glow {
+      0%   { box-shadow: 0 0 0 3px #bfdbfe; }
+      100% { box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+<nav id="lesson-nav"></nav>
+<main class="lesson-page">
+
+  <span class="badge project">Project</span>
+  <h1>14 · Change Data Capture</h1>
+  <p class="subtitle">CDC concepts, source/sink connectors, DB→Kafka→DB pipeline</p>
+
+  <section>
+    <h2>What is CDC?</h2>
+    <p>Change Data Capture (CDC) captures every INSERT, UPDATE, and DELETE from a database and streams those changes as events. Downstream services subscribe to those events instead of polling the database.</p>
+    <pre><code>Without CDC:
+  Service A writes to DB
+  Service B polls DB every 5 seconds — wasteful, delayed
+
+With CDC:
+  Service A writes to DB
+  CDC captures the change → Kafka topic
+  Service B consumes the event immediately — no polling, no delay</code></pre>
+    <p>CDC is how the LP platform keeps downstream systems (analytics, notifications, loyalty) in sync with coupon and reward store data without tight coupling.</p>
+  </section>
+
+  <section>
+    <h2>The Pipeline: Source → Kafka → Sink</h2>
+    <p>A CDC pipeline has two halves:</p>
+    <ul>
+      <li><strong>Source Connector</strong> — watches the source DB (via WAL / oplog) and publishes change events to a Kafka topic. <strong>Debezium</strong> is the most common source connector.</li>
+      <li><strong>Sink Connector</strong> — consumes events from the Kafka topic and writes them into the target DB. The <strong>JDBC Sink Connector</strong> handles SQL targets.</li>
+    </ul>
+    <p>Kafka sits in the middle as the durable buffer. If the sink is down, it resumes from its last committed offset when it restarts.</p>
+
+    <div class="pipe-diagram">
+      <div class="pipe-section-label">source</div>
+      <div class="pipe-box pipe-source">
+        <span class="pipe-box-title">Source DB (PostgreSQL / MongoDB)</span>
+        <span class="pipe-box-desc">INSERT / UPDATE / DELETE → written to WAL / oplog</span>
+      </div>
+      <div class="pipe-connector">↓ WAL change record</div>
+      <div class="pipe-box pipe-source">
+        <span class="pipe-box-title">Debezium Source Connector</span>
+        <span class="pipe-box-desc">reads WAL · serializes change event → Avro</span>
+      </div>
+      <div class="pipe-connector">↓ Avro-encoded message</div>
+
+      <div class="pipe-section-label">broker</div>
+      <div class="pipe-box pipe-broker">
+        <span class="pipe-box-title">Kafka Topic: lp.coupon.user_coupons</span>
+        <span class="pipe-box-sub">Avro schema in Schema Registry · offset tracked per consumer group</span>
+      </div>
+      <div class="pipe-connector">↓ consumer group pull</div>
+
+      <div class="pipe-section-label">sink</div>
+      <div class="pipe-box pipe-sink">
+        <span class="pipe-box-title">JDBC Sink Connector</span>
+        <span class="pipe-box-desc">deserializes Avro · executes UPSERT on target DB</span>
+      </div>
+      <div class="pipe-connector">↓ upsert / write</div>
+      <div class="pipe-box pipe-sink">
+        <span class="pipe-box-title">Target DB (Analytics DB / Replica)</span>
+        <span class="pipe-box-desc">row synced · no polling needed</span>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Avro Schema</h2>
+    <p>Messages are encoded with Avro — a compact binary format with a schema. The schema is registered in Schema Registry and referenced by ID in each message.</p>
+    <pre><code>// In lp-coupon-api, the Kafka producer serializes with Avro
+// github.com/hamba/avro/v2 handles encoding
+
+// Schema example (user_coupon event):
+{
+  "type": "record",
+  "name": "UserCouponEvent",
+  "fields": [
+    {"name": "user_coupon_id", "type": "string"},
+    {"name": "customer_id",    "type": "string"},
+    {"name": "status",         "type": "string"},
+    {"name": "updated_at",     "type": "long", "logicalType": "timestamp-millis"}
+  ]
+}</code></pre>
+  </section>
+
+  <section>
+    <h2>Producing Events — lp-coupon-api</h2>
+    <pre><code>// routes.go — Kafka producer initialized when env vars are set
+producer, err := clients.NewKafkaProducer(
+  cfg.Kafka.BootstrapServer,
+  cfg.Kafka.BrokerCertContent,      // TLS cert
+  cfg.Kafka.BrokerClientCertContent,
+  cfg.Kafka.BrokerClientKeyContent,
+  cfg.Kafka.SchemaRegistryURL,
+  cfg.Kafka.UpdateUserCouponTopic,
+  log.Zlogger,
+)
+
+// services — produce on state change
+err := kafkaProducer.Produce(ctx, userCouponID, eventBytes)</code></pre>
+    <p>If <code>KAFKA_BOOTSTRAP_SERVER</code> is empty (local dev), the producer is <code>nil</code> and <code>Produce</code> is never called — events are silently skipped. This means local dev works without Kafka running.</p>
+  </section>
+
+  <section>
+    <h2>Failure Modes</h2>
+    <p>The animation below shows at-least-once delivery — the most important failure mode to understand when building consumers.</p>
+
+    <div class="anim-controls">
+      <button id="al-play" onclick="alPlay()">▶ Play</button>
+      <button id="al-step" onclick="alStep()">Step →</button>
+      <button onclick="alReset()">↺ Reset</button>
+      <span class="anim-msg" id="al-msg">Simulate at-least-once delivery</span>
+    </div>
+    <div class="anim-wrap">
+      <div class="tree-root">Scenario: msg-id abc123 (same row update)</div>
+      <div class="anim-step pending" id="al0">  Kafka Topic delivers msg abc123 → Sink Connector receives<span class="step-tick">✓</span></div>
+      <div class="anim-step pending" id="al1">  Sink executes UPSERT → row written to Target DB<span class="step-tick">✓</span></div>
+      <div class="anim-step pending" id="al2">  Sink commits Kafka offset ── ack sent to broker<span class="step-tick">✓</span></div>
+      <div class="anim-step pending" id="al3" style="border-top:1px dashed #e2e8f0;margin-top:0.4rem;padding-top:0.4rem">  ⚠ network hiccup: ack lost, broker never confirmed offset<span class="step-tick"></span></div>
+      <div class="anim-step pending" id="al4">  Kafka redelivers same msg abc123 → Sink receives again<span class="step-tick"></span></div>
+      <div class="anim-step pending" id="al5">  Sink executes UPSERT again → idempotent, no duplicate ✓<span class="step-tick">✓</span></div>
+    </div>
+
+    <ul>
+      <li><strong>Connector lag:</strong> If the connector falls behind, consumers see delayed events. Monitor consumer group lag in the Kafka dashboard.</li>
+      <li><strong>Schema evolution:</strong> Adding a field to the Avro schema must be backwards-compatible (add with a default value). Removing fields breaks consumers.</li>
+      <li><strong>At-least-once delivery:</strong> Kafka guarantees at-least-once. Consumers must be idempotent — processing the same event twice should not cause duplicate data.</li>
+      <li><strong>Dead letter queue:</strong> Messages that fail to process go to a DLQ topic for manual inspection.</li>
+    </ul>
+  </section>
+
+  <div class="takeaways">
+    <h3>Key Takeaways</h3>
+    <ul>
+      <li>CDC has two sides: Source Connector (DB→Kafka) and Sink Connector (Kafka→DB)</li>
+      <li>Debezium reads WAL and publishes Avro-encoded events — JDBC Sink upserts them into the target DB</li>
+      <li>Kafka is the durable buffer between source and sink — sink resumes from last offset on restart</li>
+      <li>Avro schema is in Schema Registry — always add fields with defaults for backwards compat</li>
+      <li>Kafka is optional in local dev — producer init is guarded by env var</li>
+      <li>Consumers must be idempotent — Kafka delivers at-least-once, not exactly-once</li>
+    </ul>
+  </div>
+
+</main>
+<script src="../js/nav.js"></script>
+<script>
+/* ── generic stepper factory ── */
+function makeStepper(ids, msgEl, playBtn, stepBtn, onDone) {
+  let cur = -1;
+  let timer = null;
+
+  function setState(id, state) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.remove('pending','active','done');
+    el.classList.add(state);
+  }
+
+  function advance() {
+    if (cur >= 0) setState(ids[cur], 'done');
+    cur++;
+    if (cur >= ids.length) {
+      cur = ids.length;
+      if (msgEl) msgEl.textContent = 'Done';
+      if (stepBtn) stepBtn.disabled = true;
+      if (onDone) onDone();
+      return false;
+    }
+    setState(ids[cur], 'active');
+    if (msgEl) msgEl.textContent = (cur + 1) + ' / ' + ids.length;
+    return true;
+  }
+
+  function play() {
+    if (timer) return;
+    if (playBtn) playBtn.disabled = true;
+    if (stepBtn) stepBtn.disabled = true;
+    function tick() {
+      const more = advance();
+      if (more) timer = setTimeout(tick, 520);
+      else { timer = null; }
+    }
+    tick();
+  }
+
+  function step() {
+    if (timer) return;
+    advance();
+  }
+
+  function reset() {
+    if (timer) { clearTimeout(timer); timer = null; }
+    cur = -1;
+    ids.forEach(id => setState(id, 'pending'));
+    if (msgEl) msgEl.textContent = '';
+    if (playBtn) playBtn.disabled = false;
+    if (stepBtn) stepBtn.disabled = false;
+  }
+
+  return { play, step, reset };
+}
+
+/* ── At-Least-Once Delivery ── */
+const alIds = ['al0','al1','al2','al3','al4','al5'];
+const al = makeStepper(alIds,
+  document.getElementById('al-msg'),
+  document.getElementById('al-play'),
+  document.getElementById('al-step'));
+function alPlay()  { al.play(); }
+function alStep()  { al.step(); }
+function alReset() { al.reset(); document.getElementById('al-msg').textContent = 'Simulate at-least-once delivery'; }
+</script>
+</body>
+</html>

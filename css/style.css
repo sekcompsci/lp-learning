@@ -186,6 +186,25 @@ p code, li code {
 .takeaways ul { padding-left: 18px; }
 .takeaways li { margin-bottom: 6px; font-size: 14px; }
 
+/* ── Tables ── */
+.lesson-page table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 16px;
+  font-size: 14px;
+}
+.lesson-page th,
+.lesson-page td {
+  padding: 8px 12px;
+  text-align: left;
+  border: 1px solid #ddd;
+}
+.lesson-page thead th {
+  background: #f0f0f0;
+  font-weight: 700;
+}
+.lesson-page tbody tr:nth-child(even) { background: #fafafa; }
+
 /* ── File tree ── */
 .file-tree {
   background: #1e1e1e;
@@ -196,6 +215,111 @@ p code, li code {
   font-size: 13px;
   line-height: 1.7;
   margin-bottom: 16px;
+  white-space: pre;
+  overflow-x: auto;
 }
 .file-tree .dir   { color: #9cdcfe; }
 .file-tree .ann   { color: #6a9955; font-style: italic; }
+
+/* ── Nav height variable ── */
+:root { --nav-h: 42px; }
+
+/* ── Sidebar layout ── */
+.page-layout {
+  display: flex;
+  align-items: flex-start;   /* required: lets sidebar use position:sticky */
+  min-height: calc(100vh - var(--nav-h));
+}
+
+.page-layout > main.lesson-page {
+  flex: 1 1 auto;
+  min-width: 0;   /* prevents wide <pre> blocks from blowing out the flex child */
+}
+
+#lesson-sidebar {
+  width: 220px;
+  flex-shrink: 0;
+  position: sticky;
+  top: var(--nav-h);
+  height: calc(100vh - var(--nav-h));
+  overflow-y: auto;
+  background: #fff;
+  border-right: 1px solid #e0e0e0;
+  padding: 16px 0;
+}
+
+/* Sidebar groups */
+.sidebar-group { margin-bottom: 20px; }
+
+.sidebar-group__label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  padding: 0 0 6px;
+  margin: 0 16px 6px;
+}
+.sidebar-group--foundation .sidebar-group__label { color: #1a6fa0; border-bottom: 2px solid #90c4e0; }
+.sidebar-group--craft      .sidebar-group__label { color: #3a7a10; border-bottom: 2px solid #8dc45a; }
+.sidebar-group--project    .sidebar-group__label { color: #b05010; border-bottom: 2px solid #e0a060; }
+
+/* Sidebar lesson links */
+.sidebar-lesson {
+  display: block;
+  padding: 5px 16px;
+  font-size: 13px;
+  color: #444;
+  text-decoration: none;
+  line-height: 1.4;
+  border-left: 3px solid transparent;
+  transition: background 0.1s, color 0.1s;
+}
+.sidebar-lesson:hover { background: #f0f4f8; color: #1a1a1a; text-decoration: none; }
+
+/* Active lesson */
+.sidebar-lesson.active { font-weight: 700; color: #1a1a1a; }
+.sidebar-group--foundation .sidebar-lesson.active { border-left-color: #1a6fa0; background: #eef5fb; }
+.sidebar-group--craft      .sidebar-lesson.active { border-left-color: #3a7a10; background: #eef5ee; }
+.sidebar-group--project    .sidebar-lesson.active { border-left-color: #b05010; background: #fdf0e8; }
+
+/* Align nav text with content column start */
+#lesson-nav .nav-inner { max-width: none; padding-left: 236px; }
+
+/* Hamburger button (hidden on desktop) */
+.hamburger {
+  display: none;
+  flex-direction: column;
+  justify-content: space-between;
+  width: 24px;
+  height: 18px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+}
+.hamburger span { display: block; height: 2px; background: #444; border-radius: 1px; }
+
+/* Mobile overlay */
+#sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 99; }
+#sidebar-overlay.active { display: block; }
+
+/* ── Responsive: mobile (<900px) ── */
+@media (max-width: 899px) {
+  .hamburger { display: flex; }
+
+  #lesson-nav .nav-inner { padding-left: 0; }
+
+  #lesson-sidebar {
+    position: fixed;
+    top: var(--nav-h);
+    left: 0;
+    height: calc(100vh - var(--nav-h));
+    z-index: 200;
+    transform: translateX(-220px);
+    transition: transform 0.25s ease;
+    box-shadow: 2px 0 8px rgba(0,0,0,0.15);
+  }
+
+  #lesson-sidebar.open { transform: translateX(0); }
+}

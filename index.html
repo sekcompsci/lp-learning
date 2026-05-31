@@ -10,7 +10,7 @@
 
 <header class="site-header">
   <h1>LP Go Learning</h1>
-  <p>For developers joining from a React / Nest.js background &mdash; 13 modules</p>
+  <p>For developers joining from a React / Nest.js background &mdash; 14 modules</p>
 </header>
 
 <main class="index-main">
@@ -49,49 +49,54 @@
         <div class="card-title">Anti-Patterns</div>
         <div class="card-desc">Ignoring errors, goroutine leaks, global state, panic abuse</div>
       </a>
+      <a href="lessons/06-concurrency.html" class="module-card">
+        <div class="card-num">06</div>
+        <div class="card-title">Concurrency</div>
+        <div class="card-desc">Goroutines, channels, context, sync primitives, errgroup — with real LP examples</div>
+      </a>
     </div>
   </section>
 
   <section class="group-section project">
     <h2>Project</h2>
     <div class="module-grid">
-      <a href="lessons/06-file-structure.html" class="module-card">
-        <div class="card-num">06</div>
+      <a href="lessons/07-file-structure.html" class="module-card">
+        <div class="card-num">07</div>
         <div class="card-title">File Structure</div>
         <div class="card-desc">Annotated repo layout — where to add handlers, services, repos</div>
       </a>
-      <a href="lessons/07-libraries-integrations.html" class="module-card">
-        <div class="card-num">07</div>
+      <a href="lessons/08-libraries-integrations.html" class="module-card">
+        <div class="card-num">08</div>
         <div class="card-title">Libraries &amp; Integrations</div>
         <div class="card-desc">Fiber, GORM, MongoDB, Redis, Kafka, ECI, Viper, retry, rate limit, transactions</div>
       </a>
-      <a href="lessons/08-project-standards.html" class="module-card">
-        <div class="card-num">08</div>
+      <a href="lessons/09-project-standards.html" class="module-card">
+        <div class="card-num">09</div>
         <div class="card-title">Project Standards</div>
         <div class="card-desc">Handler→Service→Repo rules, Fiber patterns, repository interfaces, DI, zlog</div>
       </a>
-      <a href="lessons/09-life-cycle.html" class="module-card">
-        <div class="card-num">09</div>
+      <a href="lessons/10-life-cycle.html" class="module-card">
+        <div class="card-num">10</div>
         <div class="card-title">Life Cycle</div>
         <div class="card-desc">main.go → middleware chain → handler → response. Graceful shutdown.</div>
       </a>
-      <a href="lessons/10-dev-environment.html" class="module-card">
-        <div class="card-num">10</div>
+      <a href="lessons/11-dev-environment.html" class="module-card">
+        <div class="card-num">11</div>
         <div class="card-title">Dev Environment</div>
         <div class="card-desc">Clone, .env setup, make run/build/tidy, docker-compose up — first run checklist</div>
       </a>
-      <a href="lessons/11-testing.html" class="module-card">
-        <div class="card-num">11</div>
+      <a href="lessons/12-testing.html" class="module-card">
+        <div class="card-num">12</div>
         <div class="card-title">Testing</div>
         <div class="card-desc">Unit tests with mock repositories, table-driven tests, make test-coverage</div>
       </a>
-      <a href="lessons/12-build-deploy.html" class="module-card">
-        <div class="card-num">12</div>
+      <a href="lessons/13-build-deploy.html" class="module-card">
+        <div class="card-num">13</div>
         <div class="card-title">Build &amp; Deploy</div>
         <div class="card-desc">make build, Dockerfile, GitLab CI, blue/green deployment strategy</div>
       </a>
-      <a href="lessons/13-cdc.html" class="module-card">
-        <div class="card-num">13</div>
+      <a href="lessons/14-cdc.html" class="module-card">
+        <div class="card-num">14</div>
         <div class="card-title">Change Data Capture</div>
         <div class="card-desc">CDC concepts, Kafka JDBC sink connector, DB→topic pipeline, failure modes</div>
       </a>

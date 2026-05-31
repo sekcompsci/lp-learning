@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>10 · Life Cycle — LP Go Learning</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    /* ── shared animation primitives ── */
+    .anim-wrap {
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      background: #f8fafc;
+      padding: 1rem 1.25rem;
+      margin-bottom: 0.75rem;
+      font-family: 'SFMono-Regular', Consolas, monospace;
+      font-size: 0.82rem;
+      line-height: 1.6;
+    }
+    .anim-controls {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+    }
+    .anim-controls button {
+      padding: 0.3rem 0.75rem;
+      border: 1px solid #cbd5e1;
+      border-radius: 5px;
+      background: #fff;
+      cursor: pointer;
+      font-size: 0.8rem;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .anim-controls button:hover { background: #f1f5f9; border-color: #94a3b8; }
+    .anim-controls button:disabled { opacity: 0.4; cursor: default; }
+    .anim-msg {
+      font-size: 0.78rem;
+      color: #64748b;
+      font-style: italic;
+    }
+
+    /* ── step states ── */
+    .anim-step {
+      padding: 0.2rem 0.5rem;
+      border-left: 3px solid transparent;
+      border-radius: 3px;
+      transition: background 0.3s, border-left-color 0.3s, color 0.3s, opacity 0.3s;
+      white-space: pre;
+    }
+    .anim-step.pending  { opacity: 0.32; }
+    .anim-step.active   { border-left-color: #3b82f6; background: #eff6ff; opacity: 1;
+                          animation: step-glow 0.55s ease-out; }
+    .anim-step.done     { border-left-color: #22c55e; background: #f0fdf4; color: #374151; opacity: 1; }
+    .anim-step.done .step-tick { display: inline; }
+    .step-tick { display: none; color: #16a34a; margin-left: 0.4rem; }
+
+    @keyframes step-glow {
+      0%   { box-shadow: 0 0 0 3px #bfdbfe; }
+      100% { box-shadow: none; }
+    }
+
+    /* ── startup tree ── */
+    .tree-root {
+      font-weight: 600;
+      color: #1e293b;
+      padding: 0.2rem 0.5rem;
+      margin-bottom: 0.15rem;
+    }
+    .tree-indent { padding-left: 1.5rem; }
+
+    /* ── request journey ── */
+    .req-flow {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+    .req-box {
+      padding: 0.35rem 0.6rem;
+      border: 1px solid #e2e8f0;
+      border-left: 3px solid transparent;
+      border-radius: 4px;
+      background: #fff;
+      transition: background 0.3s, border-left-color 0.3s, opacity 0.3s;
+      opacity: 0.35;
+    }
+    .req-box.active  { border-left-color: #3b82f6; background: #eff6ff; opacity: 1;
+                       animation: step-glow 0.55s ease-out; }
+    .req-box.done    { border-left-color: #22c55e; background: #f0fdf4; opacity: 1; }
+    .req-arrow {
+      text-align: center;
+      color: #94a3b8;
+      font-size: 0.85rem;
+      line-height: 1.4;
+      transition: color 0.3s;
+    }
+    .req-arrow.lit { color: #3b82f6; }
+    .req-label { font-weight: 600; color: #1e293b; }
+    .req-desc  { color: #64748b; font-size: 0.77rem; }
+    .req-sub   { margin-top: 0.15rem; padding-left: 1rem; color: #475569; font-size: 0.77rem; }
+
+    /* ── shutdown flow ── */
+    .sd-signal {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.3rem 0.7rem;
+      border-radius: 5px;
+      border: 1px solid #fca5a5;
+      background: #fff;
+      font-weight: 600;
+      font-size: 0.82rem;
+      transition: background 0.4s, border-color 0.4s;
+      opacity: 0.35;
+    }
+    .sd-signal.active { background: #fef2f2; border-color: #ef4444; opacity: 1;
+                        animation: signal-flash 0.6s ease-out; }
+    .sd-signal.done   { background: #f0fdf4; border-color: #86efac; opacity: 1; }
+    @keyframes signal-flash {
+      0%   { background: #fca5a5; }
+      100% { background: #fef2f2; }
+    }
+
+    /* ── scenario tabs ── */
+    .scenario-tabs {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 0.75rem;
+      flex-wrap: wrap;
+    }
+    .scenario-tab {
+      padding: 0.3rem 0.9rem;
+      border: 1.5px solid #cbd5e1;
+      border-radius: 5px;
+      background: #fff;
+      cursor: pointer;
+      font-size: 0.8rem;
+      font-weight: 500;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .scenario-tab:hover { background: #f1f5f9; }
+    .scenario-tab.active { background: #eff6ff; border-color: #3b82f6; color: #1d4ed8; }
+    .scenario-tab.err-tab.active { background: #fef2f2; border-color: #ef4444; color: #b91c1c; }
+
+    /* ── req-box error / skipped states ── */
+    .req-box.error   { border-left-color: #ef4444; background: #fef2f2; opacity: 1;
+                       animation: step-glow-err 0.55s ease-out; }
+    .req-box.skipped { border-left-color: #cbd5e1; background: #f8fafc; opacity: 0.4; }
+    @keyframes step-glow-err {
+      0%   { box-shadow: 0 0 0 3px #fca5a5; }
+      100% { box-shadow: none; }
+    }
+    .req-box.error .req-label { color: #dc2626; }
+    .req-box.done  .req-label.ok  { color: #16a34a; }
+    .req-box.active .req-label.ok { color: #16a34a; }
+  </style>
+</head>
+<body>
+<nav id="lesson-nav"></nav>
+<main class="lesson-page">
+
+  <span class="badge project">Project</span>
+  <h1>10 · Life Cycle</h1>
+  <p class="subtitle">How the app starts, handles a request, and shuts down</p>
+
+  <!-- ══════════════════════════════════════════════
+       SECTION 1 — Application Startup
+  ══════════════════════════════════════════════ -->
+  <section>
+    <h2>Application Startup</h2>
+    <div class="anim-controls">
+      <button id="su-play" onclick="suPlay()">▶ Play</button>
+      <button id="su-step" onclick="suStep()">Step →</button>
+      <button onclick="suReset()">↺ Reset</button>
+      <span class="anim-msg" id="su-msg">Watch each init step run in order</span>
+    </div>
+    <div class="anim-wrap">
+      <div class="tree-root">main()</div>
+      <div class="tree-indent">
+        <div class="anim-step pending" id="su1">├── config.Load()<span class="step-tick">✓</span>               <span style="color:#94a3b8">// read env vars via Viper</span></div>
+        <div class="anim-step pending" id="su2">├── logger.New()<span class="step-tick">✓</span>                <span style="color:#94a3b8">// initialize structured logger</span></div>
+        <div class="anim-step pending" id="su3">├── app.initDatabase()<span class="step-tick">✓</span>          <span style="color:#94a3b8">// GORM → PostgreSQL (with retry)</span></div>
+        <div class="anim-step pending" id="su4">├── app.initRODatabase()<span class="step-tick">✓</span>        <span style="color:#94a3b8">// read-only replica</span></div>
+        <div class="anim-step pending" id="su5">├── app.initRedis()<span class="step-tick">✓</span>             <span style="color:#94a3b8">// Redis client (optional)</span></div>
+        <div class="anim-step pending" id="su6">└── app.initFiber()<span class="step-tick">✓</span></div>
+        <div class="tree-indent">
+          <div class="anim-step pending" id="su7">├── fiber.New(config)<span class="step-tick">✓</span>       <span style="color:#94a3b8">// Fiber app + error handler</span></div>
+          <div class="anim-step pending" id="su8">├── app.Use(recover)<span class="step-tick">✓</span>        <span style="color:#94a3b8">// catch panics, return 500</span></div>
+          <div class="anim-step pending" id="su9">├── app.Use(RequestID)<span class="step-tick">✓</span>      <span style="color:#94a3b8">// attach X-Request-ID</span></div>
+          <div class="anim-step pending" id="su10">├── app.Use(ContextEnrichment…)<span class="step-tick">✓</span> <span style="color:#94a3b8">// ClientIP · OriginContext</span></div>
+          <div class="anim-step pending" id="su11">├── app.Use(BasicAuth)<span class="step-tick">✓</span>      <span style="color:#94a3b8">// validate ALLOWED_CLIENTS</span></div>
+          <div class="anim-step pending" id="su12">├── app.Use(UserID · Logging)<span class="step-tick">✓</span> <span style="color:#94a3b8">// extract user, log every req</span></div>
+          <div class="anim-step pending" id="su13">└── routes.SetupRoutes()<span class="step-tick">✓</span>    <span style="color:#94a3b8">// repos → services → handlers</span></div>
+        </div>
+      </div>
+    </div>
+    <p>Middleware order matters. <code>RequestID</code> must run before <code>Logging</code> so the trace ID is available in logs. <code>BasicAuth</code> must run before route handlers.</p>
+  </section>
+
+  <!-- ══════════════════════════════════════════════
+       SECTION 2 — HTTP Request Journey
+  ══════════════════════════════════════════════ -->
+  <section>
+    <h2>HTTP Request Journey</h2>
+    <div class="scenario-tabs">
+      <button class="scenario-tab active" id="tab-db"  onclick="switchScenario('db')">✓ DB Success</button>
+      <button class="scenario-tab"        id="tab-svc" onclick="switchScenario('svc')">✓ Service Call</button>
+      <button class="scenario-tab err-tab" id="tab-err" onclick="switchScenario('err')">✗ Error (DB Timeout)</button>
+    </div>
+    <div class="anim-controls">
+      <button id="rj-play" onclick="rjPlay()">▶ Play</button>
+      <button id="rj-step" onclick="rjStep()">Step →</button>
+      <button onclick="rjReset()">↺ Reset</button>
+      <span class="anim-msg" id="rj-msg">Happy path: Handler → DB read → DB write → 200 OK</span>
+    </div>
+
+    <!-- ── Scenario 1: DB Success ── -->
+    <div class="anim-wrap scenario-panel" id="scenario-db">
+      <div class="req-flow">
+        <div class="req-box" id="db_r0"><span class="req-label">POST /coupon/api/v1/user-coupon/</span></div>
+        <div class="req-arrow" id="db_a0">↓</div>
+        <div class="req-box" id="db_r1"><span class="req-label">[recover middleware]</span><span class="req-desc"> — catches any panic, returns 500</span></div>
+        <div class="req-arrow" id="db_a1">↓</div>
+        <div class="req-box" id="db_r2"><span class="req-label">[RequestID middleware]</span><span class="req-desc"> — attaches trace ID to context</span></div>
+        <div class="req-arrow" id="db_a2">↓</div>
+        <div class="req-box" id="db_r3"><span class="req-label">[BasicAuth middleware]</span><span class="req-desc"> — validates Authorization header</span></div>
+        <div class="req-arrow" id="db_a3">↓</div>
+        <div class="req-box" id="db_r4"><span class="req-label">[Logging middleware]</span><span class="req-desc"> — logs "request received" with trace ID</span></div>
+        <div class="req-arrow" id="db_a4">↓</div>
+        <div class="req-box" id="db_r5">
+          <span class="req-label">userCouponHandler.IssueCoupon(c)</span>
+          <div class="req-sub">c.BodyParser(&amp;req) · validate(req) · c.UserContext()</div>
+        </div>
+        <div class="req-arrow" id="db_a5">↓</div>
+        <div class="req-box" id="db_r6">
+          <span class="req-label">userCouponService.IssueCoupon(ctx, params)</span>
+          <div class="req-sub">validate rules · couponRepo.GetByID → PostgreSQL read ✓ · userCouponRepo.Create → PostgreSQL write ✓</div>
+        </div>
+        <div class="req-arrow" id="db_a6">↓</div>
+        <div class="req-box" id="db_r7"><span class="req-label">[ErrorHandlerMiddleware]</span><span class="req-desc"> — formats errors as JSON</span></div>
+        <div class="req-arrow" id="db_a7">↓</div>
+        <div class="req-box" id="db_r8"><span class="req-label ok">Response: 200 OK {"data": {...}}</span></div>
+      </div>
+    </div>
+
+    <!-- ── Scenario 2: Service Call (Kafka + outbound HTTP) ── -->
+    <div class="anim-wrap scenario-panel" id="scenario-svc" style="display:none">
+      <div class="req-flow">
+        <div class="req-box" id="svc_r0"><span class="req-label">POST /coupon/api/v1/user-coupon/</span></div>
+        <div class="req-arrow" id="svc_a0">↓</div>
+        <div class="req-box" id="svc_r1"><span class="req-label">[recover middleware]</span><span class="req-desc"> — catches any panic, returns 500</span></div>
+        <div class="req-arrow" id="svc_a1">↓</div>
+        <div class="req-box" id="svc_r2"><span class="req-label">[RequestID middleware]</span><span class="req-desc"> — attaches trace ID to context</span></div>
+        <div class="req-arrow" id="svc_a2">↓</div>
+        <div class="req-box" id="svc_r3"><span class="req-label">[BasicAuth middleware]</span><span class="req-desc"> — validates Authorization header</span></div>
+        <div class="req-arrow" id="svc_a3">↓</div>
+        <div class="req-box" id="svc_r4"><span class="req-label">[Logging middleware]</span><span class="req-desc"> — logs "request received" with trace ID</span></div>
+        <div class="req-arrow" id="svc_a4">↓</div>
+        <div class="req-box" id="svc_r5">
+          <span class="req-label">userCouponHandler.IssueCoupon(c)</span>
+          <div class="req-sub">c.BodyParser(&amp;req) · validate(req) · c.UserContext()</div>
+        </div>
+        <div class="req-arrow" id="svc_a5">↓</div>
+        <div class="req-box" id="svc_r6">
+          <span class="req-label">userCouponService.IssueCoupon(ctx, params)</span>
+          <div class="req-sub">validate rules · couponRepo.GetByID → PostgreSQL read ✓ · userCouponRepo.Create → PostgreSQL write ✓</div>
+        </div>
+        <div class="req-arrow" id="svc_a6">↓</div>
+        <div class="req-box" id="svc_r7">
+          <span class="req-label">kafkaProducer.Produce(event)</span>
+          <div class="req-sub">publish "coupon.issued" domain event to Kafka topic</div>
+        </div>
+        <div class="req-arrow" id="svc_a7">↓</div>
+        <div class="req-box" id="svc_r8">
+          <span class="req-label">notifyService.Send(ctx, userID)</span>
+          <div class="req-sub">outbound HTTP POST to notification service · timeout + retry via context</div>
+        </div>
+        <div class="req-arrow" id="svc_a8">↓</div>
+        <div class="req-box" id="svc_r9"><span class="req-label">[ErrorHandlerMiddleware]</span><span class="req-desc"> — formats errors as JSON</span></div>
+        <div class="req-arrow" id="svc_a9">↓</div>
+        <div class="req-box" id="svc_r10"><span class="req-label ok">Response: 200 OK {"data": {...}}</span></div>
+      </div>
+    </div>
+
+    <!-- ── Scenario 3: Error — DB Timeout in service layer ── -->
+    <div class="anim-wrap scenario-panel" id="scenario-err" style="display:none">
+      <div class="req-flow">
+        <div class="req-box" id="err_r0"><span class="req-label">POST /coupon/api/v1/user-coupon/</span></div>
+        <div class="req-arrow" id="err_a0">↓</div>
+        <div class="req-box" id="err_r1"><span class="req-label">[recover middleware]</span><span class="req-desc"> — catches any panic, returns 500</span></div>
+        <div class="req-arrow" id="err_a1">↓</div>
+        <div class="req-box" id="err_r2"><span class="req-label">[RequestID middleware]</span><span class="req-desc"> — attaches trace ID to context</span></div>
+        <div class="req-arrow" id="err_a2">↓</div>
+        <div class="req-box" id="err_r3"><span class="req-label">[BasicAuth middleware]</span><span class="req-desc"> — validates Authorization header</span></div>
+        <div class="req-arrow" id="err_a3">↓</div>
+        <div class="req-box" id="err_r4"><span class="req-label">[Logging middleware]</span><span class="req-desc"> — logs "request received" with trace ID</span></div>
+        <div class="req-arrow" id="err_a4">↓</div>
+        <div class="req-box" id="err_r5">
+          <span class="req-label">userCouponHandler.IssueCoupon(c)</span>
+          <div class="req-sub">c.BodyParser(&amp;req) ✓ · validate(req) ✓ · c.UserContext() ✓</div>
+        </div>
+        <div class="req-arrow" id="err_a5">↓</div>
+        <div class="req-box" id="err_r6">
+          <span class="req-label">userCouponService.IssueCoupon — DB TIMEOUT</span>
+          <div class="req-sub">validate rules ✓ · couponRepo.GetByID → context deadline exceeded ✗ · returns error</div>
+        </div>
+        <div class="req-arrow" id="err_a6">↓ error propagates up</div>
+        <div class="req-box" id="err_r7"><span class="req-label">[ErrorHandlerMiddleware]</span><span class="req-desc"> — wraps error as {"error": "service unavailable"}</span></div>
+        <div class="req-arrow" id="err_a7">↓</div>
+        <div class="req-box" id="err_r8"><span class="req-label">Response: 500 Internal Server Error</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════
+       SECTION 3 — Graceful Shutdown
+  ══════════════════════════════════════════════ -->
+  <section>
+    <h2>Graceful Shutdown</h2>
+    <div class="anim-controls">
+      <button id="sd-play" onclick="sdPlay()">▶ Play</button>
+      <button id="sd-step" onclick="sdStep()">Step →</button>
+      <button onclick="sdReset()">↺ Reset</button>
+      <span class="anim-msg" id="sd-msg">Simulate receiving SIGTERM</span>
+    </div>
+    <div class="anim-wrap">
+      <div style="margin-bottom:0.5rem">
+        <span class="sd-signal" id="sd0">⚡ SIGTERM received</span>
+      </div>
+      <div class="tree-indent">
+        <div class="anim-step pending" id="sd1">├── fiber.ShutdownWithContext(30s)<span class="step-tick">✓</span>  <span style="color:#94a3b8">// stop new requests, drain in-flight</span></div>
+        <div class="anim-step pending" id="sd2">├── db.Close()<span class="step-tick">✓</span>                         <span style="color:#94a3b8">// close PostgreSQL (main)</span></div>
+        <div class="anim-step pending" id="sd3">├── roDB.Close()<span class="step-tick">✓</span>                       <span style="color:#94a3b8">// close read-only replica</span></div>
+        <div class="anim-step pending" id="sd4">├── redis.Close()<span class="step-tick">✓</span>                      <span style="color:#94a3b8">// close Redis client</span></div>
+        <div class="anim-step pending" id="sd5">└── logger.Close()<span class="step-tick">✓</span>                     <span style="color:#94a3b8">// flush log buffer</span></div>
+      </div>
+      <div class="anim-step pending" id="sd6" style="margin-top:0.4rem;font-weight:600">
+        ✓ Process exited cleanly<span class="step-tick"></span>
+      </div>
+    </div>
+    <p>Kubernetes sends <code>SIGTERM</code> before killing a pod. The 30-second timeout gives in-flight requests time to complete. This is why <code>make run</code> stops cleanly on Ctrl-C.</p>
+  </section>
+
+  <div class="takeaways">
+    <h3>Key Takeaways</h3>
+    <ul>
+      <li>Startup order: config → logger → DB → Redis → Fiber → middleware → routes</li>
+      <li>Middleware runs in registration order — RequestID before Logging, BasicAuth before handlers</li>
+      <li>Every request carries a trace ID through context — all logs are correlated</li>
+      <li>Graceful shutdown: stop accepting requests → drain in-flight → close connections</li>
+    </ul>
+  </div>
+
+</main>
+<script src="../js/nav.js"></script>
+<script>
+/* ── generic stepper factory ── */
+function makeStepper(ids, msgEl, playBtn, stepBtn, onDone) {
+  let cur = -1;
+  let timer = null;
+
+  function setState(id, state) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.remove('pending','active','done','lit');
+    el.classList.add(state);
+  }
+
+  function advance() {
+    if (cur >= 0) setState(ids[cur], 'done');
+    cur++;
+    if (cur >= ids.length) {
+      cur = ids.length; // past end
+      if (msgEl) msgEl.textContent = 'Done';
+      if (stepBtn) stepBtn.disabled = true;
+      if (onDone) onDone();
+      return false;
+    }
+    setState(ids[cur], 'active');
+    if (msgEl) msgEl.textContent = (cur + 1) + ' / ' + ids.length;
+    return true;
+  }
+
+  function play() {
+    if (timer) return;
+    if (playBtn) playBtn.disabled = true;
+    if (stepBtn) stepBtn.disabled = true;
+    function tick() {
+      const more = advance();
+      if (more) timer = setTimeout(tick, 520);
+      else { timer = null; }
+    }
+    tick();
+  }
+
+  function step() {
+    if (timer) return;
+    advance();
+  }
+
+  function reset() {
+    if (timer) { clearTimeout(timer); timer = null; }
+    cur = -1;
+    ids.forEach(id => setState(id, 'pending'));
+    if (msgEl) msgEl.textContent = '';
+    if (playBtn) playBtn.disabled = false;
+    if (stepBtn) stepBtn.disabled = false;
+  }
+
+  return { play, step, reset };
+}
+
+/* ── Section 1: Startup ── */
+const suIds = ['su1','su2','su3','su4','su5','su6','su7','su8','su9','su10','su11','su12','su13'];
+const su = makeStepper(suIds,
+  document.getElementById('su-msg'),
+  document.getElementById('su-play'),
+  document.getElementById('su-step'));
+function suPlay()  { su.play(); }
+function suStep()  { su.step(); }
+function suReset() { su.reset(); document.getElementById('su-msg').textContent = 'Watch each init step run in order'; }
+
+/* ── Section 2: Request Journey — multi-scenario stepper ── */
+function makeReqStepper(boxes, arrows, msgEl, initialMsg) {
+  // boxes  = [{id, doneState}]  doneState: 'done'|'error'|'skipped'
+  // arrows = [id, ...]          length = boxes.length - 1
+  let cur = -1;
+  let timer = null;
+
+  function setBox(id, state) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.remove('pending','active','done','error','skipped');
+    el.classList.add(state);
+  }
+  function setArrow(id, lit) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.toggle('lit', lit);
+  }
+
+  function advance() {
+    if (cur >= 0) {
+      setBox(boxes[cur].id, boxes[cur].doneState);
+      if (cur < arrows.length) setArrow(arrows[cur], false);
+    }
+    cur++;
+    if (cur >= boxes.length) {
+      if (msgEl) msgEl.textContent = 'Done';
+      document.getElementById('rj-step').disabled = true;
+      return false;
+    }
+    setBox(boxes[cur].id, 'active');
+    if (cur > 0 && cur - 1 < arrows.length) setArrow(arrows[cur - 1], true);
+    if (msgEl) msgEl.textContent = (cur + 1) + ' / ' + boxes.length;
+    return true;
+  }
+
+  function play() {
+    if (timer) return;
+    document.getElementById('rj-play').disabled = true;
+    document.getElementById('rj-step').disabled = true;
+    function tick() {
+      const more = advance();
+      if (more) timer = setTimeout(tick, 540);
+      else timer = null;
+    }
+    tick();
+  }
+
+  function step() { if (!timer) advance(); }
+
+  function reset() {
+    if (timer) { clearTimeout(timer); timer = null; }
+    cur = -1;
+    boxes.forEach(b => setBox(b.id, 'pending'));
+    arrows.forEach(id => setArrow(id, false));
+    if (msgEl) msgEl.textContent = initialMsg || '';
+    document.getElementById('rj-play').disabled = false;
+    document.getElementById('rj-step').disabled = false;
+  }
+
+  return { play, step, reset };
+}
+
+const rjMsg = document.getElementById('rj-msg');
+
+const scenarioDB = makeReqStepper(
+  [ {id:'db_r0',doneState:'done'}, {id:'db_r1',doneState:'done'}, {id:'db_r2',doneState:'done'},
+    {id:'db_r3',doneState:'done'}, {id:'db_r4',doneState:'done'}, {id:'db_r5',doneState:'done'},
+    {id:'db_r6',doneState:'done'}, {id:'db_r7',doneState:'done'}, {id:'db_r8',doneState:'done'} ],
+  ['db_a0','db_a1','db_a2','db_a3','db_a4','db_a5','db_a6','db_a7'],
+  rjMsg, 'Happy path: Handler → DB read → DB write → 200 OK'
+);
+
+const scenarioSVC = makeReqStepper(
+  [ {id:'svc_r0',doneState:'done'}, {id:'svc_r1',doneState:'done'}, {id:'svc_r2',doneState:'done'},
+    {id:'svc_r3',doneState:'done'}, {id:'svc_r4',doneState:'done'}, {id:'svc_r5',doneState:'done'},
+    {id:'svc_r6',doneState:'done'}, {id:'svc_r7',doneState:'done'}, {id:'svc_r8',doneState:'done'},
+    {id:'svc_r9',doneState:'done'}, {id:'svc_r10',doneState:'done'} ],
+  ['svc_a0','svc_a1','svc_a2','svc_a3','svc_a4','svc_a5','svc_a6','svc_a7','svc_a8','svc_a9'],
+  rjMsg, 'Happy path: DB ops + Kafka publish + outbound HTTP → 200 OK'
+);
+
+const scenarioERR = makeReqStepper(
+  [ {id:'err_r0',doneState:'done'}, {id:'err_r1',doneState:'done'}, {id:'err_r2',doneState:'done'},
+    {id:'err_r3',doneState:'done'}, {id:'err_r4',doneState:'done'}, {id:'err_r5',doneState:'done'},
+    {id:'err_r6',doneState:'error'}, {id:'err_r7',doneState:'done'}, {id:'err_r8',doneState:'error'} ],
+  ['err_a0','err_a1','err_a2','err_a3','err_a4','err_a5','err_a6','err_a7'],
+  rjMsg, 'Error path: middleware OK → handler OK → service DB timeout → 500'
+);
+
+const scenarios = { db: scenarioDB, svc: scenarioSVC, err: scenarioERR };
+let activeScenario = scenarioDB;
+
+function switchScenario(name) {
+  if (!scenarios[name]) return;
+  activeScenario.reset();
+  document.querySelectorAll('.scenario-panel').forEach(function(el) { el.style.display = 'none'; });
+  document.getElementById('scenario-' + name).style.display = '';
+  document.querySelectorAll('.scenario-tab').forEach(function(el) { el.classList.remove('active'); });
+  document.getElementById('tab-' + name).classList.add('active');
+  activeScenario = scenarios[name];
+  activeScenario.reset();
+}
+
+function rjPlay()  { activeScenario.play(); }
+function rjStep()  { activeScenario.step(); }
+function rjReset() { activeScenario.reset(); }
+
+// initialize all scenarios to pending
+['db', 'svc', 'err'].forEach(function(s) { scenarios[s].reset(); });
+
+/* ── Section 3: Shutdown ── */
+// sd0 is the signal element (sd-signal class), sd1-sd6 are anim-steps
+function sdSetSignal(state) {
+  const el = document.getElementById('sd0');
+  if (!el) return;
+  el.classList.remove('active','done');
+  if (state === 'pending') { el.style.opacity = '0.35'; }
+  else { el.style.opacity = '1'; el.classList.add(state); }
+}
+
+const sdStepIds = ['sd1','sd2','sd3','sd4','sd5','sd6'];
+let sdCur = -1; // -1=before signal, 0=signal, 1..6=steps
+let sdTimer = null;
+
+function sdAdvance() {
+  if (sdCur === -1) {
+    sdSetSignal('active');
+    sdCur = 0;
+    document.getElementById('sd-msg').textContent = 'SIGTERM received…';
+    return true;
+  }
+  if (sdCur === 0) {
+    sdSetSignal('done');
+  } else {
+    const el = document.getElementById(sdStepIds[sdCur - 1]);
+    if (el) { el.classList.remove('pending','active'); el.classList.add('done'); }
+  }
+  sdCur++;
+  const stepIdx = sdCur - 1;
+  if (stepIdx >= sdStepIds.length) {
+    document.getElementById('sd-msg').textContent = 'Clean exit';
+    document.getElementById('sd-step').disabled = true;
+    return false;
+  }
+  const el = document.getElementById(sdStepIds[stepIdx]);
+  if (el) { el.classList.remove('pending','done'); el.classList.add('active'); }
+  document.getElementById('sd-msg').textContent = (sdCur) + ' / ' + (sdStepIds.length + 1);
+  return true;
+}
+
+function sdPlay() {
+  if (sdTimer) return;
+  document.getElementById('sd-play').disabled = true;
+  document.getElementById('sd-step').disabled = true;
+  function tick() {
+    const more = sdAdvance();
+    if (more) sdTimer = setTimeout(tick, 520);
+    else sdTimer = null;
+  }
+  tick();
+}
+function sdStep() {
+  if (sdTimer) return;
+  sdAdvance();
+}
+function sdReset() {
+  if (sdTimer) { clearTimeout(sdTimer); sdTimer = null; }
+  sdCur = -1;
+  sdSetSignal('pending');
+  sdStepIds.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { el.classList.remove('active','done'); el.classList.add('pending'); }
+  });
+  document.getElementById('sd-msg').textContent = 'Simulate receiving SIGTERM';
+  document.getElementById('sd-play').disabled = false;
+  document.getElementById('sd-step').disabled = false;
+}
+</script>
+</body>
+</html>

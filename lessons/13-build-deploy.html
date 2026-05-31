@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>13 · Build &amp; Deploy — LP Go Learning</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    /* ── animation primitives (matches lesson 10) ── */
+    .anim-wrap {
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      background: #f8fafc;
+      padding: 1rem 1.25rem;
+      margin-bottom: 0.75rem;
+      font-family: 'SFMono-Regular', Consolas, monospace;
+      font-size: 0.82rem;
+      line-height: 1.6;
+    }
+    .anim-controls {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.75rem;
+      flex-wrap: wrap;
+    }
+    .anim-controls button {
+      padding: 0.3rem 0.75rem;
+      border: 1px solid #cbd5e1;
+      border-radius: 5px;
+      background: #fff;
+      cursor: pointer;
+      font-size: 0.8rem;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .anim-controls button:hover  { background: #f1f5f9; border-color: #94a3b8; }
+    .anim-controls button:disabled { opacity: 0.4; cursor: default; }
+    .anim-msg { font-size: 0.78rem; color: #64748b; font-style: italic; }
+
+    .anim-step {
+      padding: 0.2rem 0.5rem;
+      border-left: 3px solid transparent;
+      border-radius: 3px;
+      transition: background 0.3s, border-left-color 0.3s, color 0.3s, opacity 0.3s;
+      white-space: pre-wrap;
+    }
+    .anim-step.pending { opacity: 0.32; }
+    .anim-step.active  { border-left-color: #3b82f6; background: #eff6ff; opacity: 1;
+                         animation: step-glow 0.55s ease-out; }
+    .anim-step.done    { border-left-color: #22c55e; background: #f0fdf4; opacity: 1; }
+    .anim-step.done-fail { border-left-color: #ef4444; background: #fef2f2; opacity: 1; }
+    .anim-step.done .step-tick, .anim-step.done-fail .step-tick { display: inline; }
+    .step-tick { display: none; margin-left: 0.4rem; }
+    .anim-step.done .step-tick     { color: #16a34a; }
+    .anim-step.done-fail .step-tick { color: #dc2626; }
+
+    @keyframes step-glow {
+      0%   { box-shadow: 0 0 0 3px #bfdbfe; }
+      100% { box-shadow: none; }
+    }
+
+    /* ── pod visualisation ── */
+    .pod-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+    .pod-box {
+      border: 2px solid;
+      border-radius: 10px;
+      padding: 0.85rem 1rem;
+      font-size: 0.82rem;
+      transition: background 0.4s, border-color 0.4s, opacity 0.4s;
+    }
+    .pod-box.active-pod {
+      border-color: #22c55e;
+      background: #f0fdf4;
+    }
+    .pod-box.preview-pod {
+      border-color: #f59e0b;
+      background: #fffbeb;
+    }
+    .pod-box.dimmed {
+      opacity: 0.35;
+    }
+    .pod-label {
+      font-size: 0.65rem;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      margin-bottom: 0.35rem;
+    }
+    .active-pod  .pod-label { color: #15803d; }
+    .preview-pod .pod-label { color: #b45309; }
+    .pod-version {
+      font-family: 'SFMono-Regular', Consolas, monospace;
+      font-weight: 600;
+      font-size: 1rem;
+      margin-bottom: 0.3rem;
+      transition: color 0.4s;
+    }
+    .pod-traffic {
+      font-size: 0.77rem;
+      color: #475569;
+      transition: color 0.3s;
+    }
+    .pod-traffic.live   { color: #15803d; font-weight: 600; }
+    .pod-traffic.testing { color: #b45309; font-weight: 600; }
+    .pod-traffic.dead   { color: #94a3b8; }
+
+    /* ── outcome buttons ── */
+    .outcome-row {
+      display: none;
+      gap: 0.6rem;
+      margin-bottom: 0.75rem;
+      align-items: center;
+    }
+    .outcome-row.visible { display: flex; }
+    .outcome-row .outcome-label {
+      font-size: 0.78rem;
+      color: #64748b;
+      font-style: italic;
+    }
+    .btn-promote, .btn-abort {
+      padding: 0.3rem 0.9rem;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 0.8rem;
+      font-weight: 600;
+      transition: opacity 0.15s;
+    }
+    .btn-promote { background: #22c55e; color: #fff; }
+    .btn-promote:hover { opacity: 0.85; }
+    .btn-abort   { background: #ef4444; color: #fff; }
+    .btn-abort:hover { opacity: 0.85; }
+    .btn-promote:disabled, .btn-abort:disabled { opacity: 0.35; cursor: default; }
+  </style>
+</head>
+<body>
+<nav id="lesson-nav"></nav>
+<main class="lesson-page">
+
+  <span class="badge project">Project</span>
+  <h1>13 · Build &amp; Deploy</h1>
+  <p class="subtitle">make build, Dockerfile, GitLab CI, Argo Rollouts blue/green</p>
+
+  <!-- ══════════════════════════════════════════════
+       SECTION 1 — Building the Binary
+  ══════════════════════════════════════════════ -->
+  <section>
+    <h2>Building the Binary</h2>
+    <pre><code># Compile to bin/api with version string injected
+make build
+
+# Equivalent command:
+go build -ldflags "-X main.Version=$(git describe --tags --always)" -o bin/api .
+
+# Run the binary directly
+./bin/api</code></pre>
+    <p>The <code>Version</code> variable in <code>main.go</code> gets the git tag at build time. It appears in the <code>/health</code> and <code>/</code> responses so you know exactly which version is running.</p>
+  </section>
+
+  <!-- ══════════════════════════════════════════════
+       SECTION 2 — Dockerfile
+  ══════════════════════════════════════════════ -->
+  <section>
+    <h2>Dockerfile</h2>
+    <pre><code># Multi-stage build: builder stage compiles, final stage is minimal
+FROM golang:1.21-alpine AS builder
+WORKDIR /app
+COPY go.mod go.sum ./
+RUN go mod download          # cache dependencies as a layer
+COPY . .
+RUN go build -o bin/api .
+
+FROM alpine:latest           # minimal final image (~10MB)
+COPY --from=builder /app/bin/api /api
+ENTRYPOINT ["/api"]</code></pre>
+    <p>Multi-stage builds keep the final image small — no Go compiler, no source code. Only the binary.</p>
+  </section>
+
+  <!-- ══════════════════════════════════════════════
+       SECTION 3 — GitLab CI Pipeline
+  ══════════════════════════════════════════════ -->
+  <section>
+    <h2>GitLab CI Pipeline</h2>
+    <p>Defined in <code>.gitlab-ci.yml</code>. Key stages:</p>
+    <pre><code>stages:
+  - test      # go test ./...
+  - build     # docker build + push to registry
+  - deploy    # update Argo Rollout image tag → triggers blue/green
+
+# Deploy stage sets the new image on the Rollout resource
+deploy:
+  script:
+    - kubectl argo rollouts set image &lt;rollout-name&gt;
+        api=$CI_REGISTRY_IMAGE:$CI_COMMIT_SHA</code></pre>
+    <p>The image tag is the commit SHA — every push creates a unique, traceable image. Setting a new image on the Rollout automatically starts a blue/green update: the new version goes to the <strong>preview</strong> pod while the <strong>active</strong> pod keeps serving customers.</p>
+  </section>
+
+  <!-- ══════════════════════════════════════════════
+       SECTION 4 — Argo Rollouts Blue/Green
+  ══════════════════════════════════════════════ -->
+  <section>
+    <h2>Blue/Green with Argo Rollouts</h2>
+    <p>
+      Argo Rollouts extends Kubernetes with a <code>Rollout</code> resource that manages blue/green and canary strategies.
+      In blue/green mode it maintains two pods: <strong>active</strong> (serving 100% of customer traffic) and
+      <strong>preview</strong> (new version, reachable only via the preview service URL).
+      You deploy to preview, run sanity tests, then either <em>promote</em> or <em>abort</em>.
+    </p>
+
+    <!-- Pod visualisation -->
+    <div class="pod-grid">
+      <div class="pod-box active-pod" id="pod-active">
+        <div class="pod-label">Active</div>
+        <div class="pod-version" id="active-version">v1.2.3</div>
+        <div class="pod-traffic live" id="active-traffic">● 100% customer traffic</div>
+      </div>
+      <div class="pod-box preview-pod dimmed" id="pod-preview">
+        <div class="pod-label">Preview</div>
+        <div class="pod-version" id="preview-version">—</div>
+        <div class="pod-traffic dead" id="preview-traffic">idle</div>
+      </div>
+    </div>
+
+    <!-- Controls -->
+    <div class="anim-controls">
+      <button id="rp-play" onclick="rpPlay()">▶ Play</button>
+      <button id="rp-step" onclick="rpStep()">Step →</button>
+      <button onclick="rpReset()">↺ Reset</button>
+      <span class="anim-msg" id="rp-msg">Deploy → sanity test → choose outcome</span>
+    </div>
+
+    <!-- Outcome choice (appears after step 3) -->
+    <div class="outcome-row" id="outcome-row">
+      <span class="outcome-label">Sanity result:</span>
+      <button class="btn-promote" id="btn-promote" onclick="chooseOutcome('promote')">✓ Promote</button>
+      <button class="btn-abort"   id="btn-abort"   onclick="chooseOutcome('abort')">✗ Abort</button>
+    </div>
+
+    <!-- Step log -->
+    <div class="anim-wrap">
+      <div class="anim-step pending" id="rp1">1. CI sets new image tag on Rollout resource<span class="step-tick">✓</span></div>
+      <div class="anim-step pending" id="rp2">2. Argo creates preview pod with v1.3.0 — active unchanged<span class="step-tick">✓</span></div>
+      <div class="anim-step pending" id="rp3">3. Sanity tests run against preview service URL<span class="step-tick">✓</span></div>
+      <!-- promote path (hidden until chosen) -->
+      <div class="anim-step pending" id="rp4p" style="display:none">4. <span style="color:#15803d">kubectl argo rollouts promote &lt;rollout-name&gt;</span><span class="step-tick">✓</span></div>
+      <div class="anim-step pending" id="rp5p" style="display:none">5. <span style="color:#15803d">Preview → Active · old pod terminated · v1.3.0 live</span><span class="step-tick">✓</span></div>
+      <!-- abort path (hidden until chosen) -->
+      <div class="anim-step pending" id="rp4a" style="display:none">4. <span style="color:#dc2626">kubectl argo rollouts abort &lt;rollout-name&gt;</span><span class="step-tick">✓</span></div>
+      <div class="anim-step pending" id="rp5a" style="display:none">5. <span style="color:#dc2626">Preview terminated · Active v1.2.3 unchanged · rollback complete</span><span class="step-tick">✓</span></div>
+    </div>
+
+    <div class="callout tip">
+      <strong>Zero customer impact:</strong> Active pod keeps serving 100% of traffic throughout the entire deploy. Only after an explicit <code>promote</code> does traffic shift — and it shifts atomically, not gradually.
+    </div>
+  </section>
+
+  <div class="takeaways">
+    <h3>Key Takeaways</h3>
+    <ul>
+      <li><code>make build</code> injects git version into the binary via ldflags</li>
+      <li>Multi-stage Dockerfile: compile in Go image, run in Alpine (~10MB final image)</li>
+      <li>CI pipeline: test → build Docker image (tagged with commit SHA) → set image on Rollout</li>
+      <li>Argo Rollouts blue/green: <strong>active</strong> pod serves customers, <strong>preview</strong> pod gets the new version</li>
+      <li>Deploy to preview → run sanity tests → <code>promote</code> (atomic switch) or <code>abort</code> (preview terminated, active unchanged)</li>
+    </ul>
+  </div>
+
+</main>
+<script src="../js/nav.js"></script>
+<script>
+/* ── Argo Rollout deploy animation ── */
+
+let rpCur   = -1;
+let rpPath  = null;   // null | 'promote' | 'abort'
+let rpTimer = null;
+let rpWaitingForPath = false;
+
+const sharedIds  = ['rp1', 'rp2', 'rp3'];
+const promoteIds = ['rp4p', 'rp5p'];
+const abortIds   = ['rp4a', 'rp5a'];
+
+function rpAllIds() {
+  if (!rpPath) return sharedIds;
+  return sharedIds.concat(rpPath === 'promote' ? promoteIds : abortIds);
+}
+
+function setState(id, state) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.remove('pending', 'active', 'done', 'done-fail');
+  el.classList.add(state);
+}
+
+function updatePods(step) {
+  const av = document.getElementById('active-version');
+  const at = document.getElementById('active-traffic');
+  const pv = document.getElementById('preview-version');
+  const pt = document.getElementById('preview-traffic');
+  const pp = document.getElementById('pod-preview');
+
+  if (step < 0) {
+    // initial state
+    av.textContent = 'v1.2.3';
+    at.className = 'pod-traffic live'; at.textContent = '● 100% customer traffic';
+    pv.textContent = '—';
+    pt.className = 'pod-traffic dead'; pt.textContent = 'idle';
+    pp.classList.add('dimmed');
+    return;
+  }
+
+  if (step === 0) {
+    // step 1: CI set image — preview still idle
+    av.textContent = 'v1.2.3';
+    at.className = 'pod-traffic live'; at.textContent = '● 100% customer traffic';
+    pv.textContent = 'v1.3.0';
+    pt.className = 'pod-traffic'; pt.textContent = 'pulling image...';
+    pp.classList.remove('dimmed');
+  } else if (step === 1) {
+    // step 2: preview pod running
+    pv.textContent = 'v1.3.0';
+    pt.className = 'pod-traffic testing'; pt.textContent = '● preview service ready';
+    pp.classList.remove('dimmed');
+  } else if (step === 2) {
+    // step 3: sanity tests running
+    pt.className = 'pod-traffic testing'; pt.textContent = '⏳ sanity tests running...';
+  } else if (rpPath === 'promote') {
+    if (step === 3) {
+      // step 4p: promoting
+      av.textContent = 'v1.3.0';
+      at.className = 'pod-traffic'; at.textContent = '↑ promoting...';
+      pt.className = 'pod-traffic'; pt.textContent = '→ becoming active';
+    } else if (step === 4) {
+      // step 5p: done
+      av.textContent = 'v1.3.0';
+      at.className = 'pod-traffic live'; at.textContent = '● 100% customer traffic';
+      pv.textContent = '—';
+      pt.className = 'pod-traffic dead'; pt.textContent = 'terminated';
+      pp.classList.add('dimmed');
+    }
+  } else if (rpPath === 'abort') {
+    if (step === 3) {
+      // step 4a: aborting
+      pt.className = 'pod-traffic'; pt.textContent = '↓ aborting...';
+    } else if (step === 4) {
+      // step 5a: done — active unchanged
+      pv.textContent = '—';
+      pt.className = 'pod-traffic dead'; pt.textContent = 'terminated';
+      pp.classList.add('dimmed');
+    }
+  }
+}
+
+function rpAdvance() {
+  const ids = rpAllIds();
+
+  // mark previous done
+  if (rpCur >= 0) {
+    const finState = (rpPath === 'abort' && rpCur >= sharedIds.length) ? 'done-fail' : 'done';
+    setState(ids[rpCur], finState);
+  }
+
+  rpCur++;
+
+  // reached sanity step — wait for path choice
+  if (rpCur === sharedIds.length && !rpPath) {
+    rpCur = sharedIds.length - 1; // rewind so next advance properly activates rp4x
+    rpWaitingForPath = true;
+    document.getElementById('outcome-row').classList.add('visible');
+    document.getElementById('rp-step').disabled = true;
+    document.getElementById('rp-msg').textContent = 'Choose: Promote or Abort';
+    return false;
+  }
+
+  if (rpCur >= rpAllIds().length) {
+    document.getElementById('rp-msg').textContent = rpPath === 'promote' ? 'v1.3.0 is live ✓' : 'Rollback complete — v1.2.3 unchanged ✓';
+    document.getElementById('rp-step').disabled = true;
+    document.getElementById('rp-play').disabled = true;
+    updatePods(rpCur - 1);
+    return false;
+  }
+
+  setState(rpAllIds()[rpCur], 'active');
+  updatePods(rpCur);
+  return true;
+}
+
+function rpStep() {
+  if (rpTimer) { clearInterval(rpTimer); rpTimer = null; document.getElementById('rp-play').textContent = '▶ Play'; }
+  rpAdvance();
+}
+
+function rpPlay() {
+  if (rpTimer) {
+    clearInterval(rpTimer);
+    rpTimer = null;
+    document.getElementById('rp-play').textContent = '▶ Play';
+    return;
+  }
+  document.getElementById('rp-play').textContent = '⏸ Pause';
+  rpTimer = setInterval(() => {
+    const cont = rpAdvance();
+    if (!cont || rpWaitingForPath) {
+      clearInterval(rpTimer); rpTimer = null;
+      document.getElementById('rp-play').textContent = '▶ Play';
+    }
+  }, 900);
+}
+
+function chooseOutcome(path) {
+  rpPath = path;
+  rpWaitingForPath = false;
+  document.getElementById('outcome-row').classList.remove('visible');
+  document.getElementById('btn-promote').disabled = true;
+  document.getElementById('btn-abort').disabled   = true;
+  document.getElementById('rp-step').disabled = false;
+
+  // show the chosen path steps
+  const showIds = path === 'promote' ? promoteIds : abortIds;
+  showIds.forEach(id => { document.getElementById(id).style.display = ''; });
+
+  document.getElementById('rp-msg').textContent =
+    path === 'promote' ? 'Promoting preview → active...' : 'Aborting — reverting to active...';
+
+  // auto-continue if play was running
+  rpTimer = setInterval(() => {
+    const cont = rpAdvance();
+    if (!cont) { clearInterval(rpTimer); rpTimer = null; document.getElementById('rp-play').textContent = '▶ Play'; }
+  }, 900);
+  document.getElementById('rp-play').textContent = '⏸ Pause';
+}
+
+function rpReset() {
+  if (rpTimer) { clearInterval(rpTimer); rpTimer = null; }
+  rpCur  = -1;
+  rpPath = null;
+  rpWaitingForPath = false;
+
+  [...sharedIds, ...promoteIds, ...abortIds].forEach(id => setState(id, 'pending'));
+  promoteIds.forEach(id => { document.getElementById(id).style.display = 'none'; });
+  abortIds.forEach(id  => { document.getElementById(id).style.display = 'none'; });
+
+  document.getElementById('outcome-row').classList.remove('visible');
+  document.getElementById('btn-promote').disabled = false;
+  document.getElementById('btn-abort').disabled   = false;
+  document.getElementById('rp-play').textContent = '▶ Play';
+  document.getElementById('rp-play').disabled = false;
+  document.getElementById('rp-step').disabled = false;
+  document.getElementById('rp-msg').textContent = 'Deploy → sanity test → choose outcome';
+
+  updatePods(-1);
+}
+</script>
+</body>
+</html>

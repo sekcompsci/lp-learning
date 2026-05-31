@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>08 · Project Standards — LP Go Learning</title>
+  <title>09 · Project Standards — LP Go Learning</title>
   <link rel="stylesheet" href="../css/style.css">
 </head>
 <body>
@@ -11,7 +11,7 @@
 <main class="lesson-page">
 
   <span class="badge project">Project</span>
-  <h1>08 · Project Standards</h1>
+  <h1>09 · Project Standards</h1>
   <p class="subtitle">Layer rules, Fiber patterns, repository interfaces, DI, logging</p>
 
   <section>
@@ -49,6 +49,19 @@ func (h *SystemHandler) Info(c *fiber.Ctx) error {
   })
 }</code></pre>
     <p>Handlers receive dependencies via constructor injection. The handler method receives <code>*fiber.Ctx</code> and returns <code>error</code>. For errors, return them — the <code>ErrorHandlerMiddleware</code> formats the response.</p>
+  </section>
+
+  <section>
+    <h2>Validation — Rule of Thumb</h2>
+    <table>
+      <thead><tr><th>What</th><th>Where</th></tr></thead>
+      <tbody>
+        <tr><td><code>required</code>, <code>min</code>, <code>max</code>, <code>uuid</code>, <code>oneof</code>, <code>email</code></td><td>Struct tags</td></tr>
+        <tr><td>Parse body + fire validator</td><td>Handler</td></tr>
+        <tr><td>Uniqueness, FK exists, quota, business limits</td><td>Service</td></tr>
+        <tr><td>Auth, rate-limit</td><td>Middleware</td></tr>
+      </tbody>
+    </table>
   </section>
 
   <section>
@@ -139,7 +152,7 @@ s.logger.Errorf(ctx, "Failed to get coupon: %v", err)
       <li>Services: all business logic. Default values live here (<code>createdBy = "system"</code>).</li>
       <li>Repositories: data access only. Defined by interfaces in <code>interfaces.go</code>.</li>
       <li>All wiring in <code>routes.go</code>: repos → services → handlers → routes.</li>
-      <li>Log with the injected <code>zlog.Logger</code> + context — never <code>fmt.Println</code> in services/repos.</li>
+<li>Log with the injected <code>zlog.Logger</code> + context — never <code>fmt.Println</code> in services/repos.</li>
     </ul>
   </div>
 
