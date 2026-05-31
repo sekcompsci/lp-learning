@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>03 · Error Handling — LP Go Learning</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+<nav id="lesson-nav"></nav>
+<main class="lesson-page">
+
+  <span class="badge foundation">Foundation</span>
+  <h1>03 · Error Handling</h1>
+  <p class="subtitle">No try/catch — errors are values you return and check</p>
+
+  <div class="callout analogy">
+    <strong>Node.js background?</strong>
+    Instead of <code>throw new Error()</code> and <code>try/catch</code>, Go returns <code>error</code> as a second value. The caller always checks it — nothing is caught automatically.
+  </div>
+
+  <section>
+    <h2>The Basic Pattern</h2>
+    <pre><code>result, err := doSomething()
+if err != nil {
+  return fmt.Errorf("doSomething failed: %w", err)
+}
+// use result safely here</code></pre>
+    <p>The <code>%w</code> verb wraps the original error so callers can inspect it. Always add context when wrapping — it builds a chain like a stack trace.</p>
+  </section>
+
+  <section>
+    <h2>Real Code — lp-coupon-api</h2>
+    <pre><code>// internal/services/coupon_service.go
+func (s *CouponService) GetCouponByID(ctx context.Context, id string) (*models.Coupon, error) {
+  coupon, err := s.couponRepo.GetByID(ctx, id)
+  if err != nil {
+    return nil, fmt.Errorf("GetCouponByID: %w", err)
+  }
+  return coupon, nil
+}</code></pre>
+    <p>Notice: the handler calls the service, the service calls the repo, each layer wraps the error with context. By the time the error reaches the handler, it has a full breadcrumb trail.</p>
+  </section>
+
+  <section>
+    <h2>errors.Is and errors.As</h2>
+    <p>Use these to inspect wrapped errors rather than string matching.</p>
+    <pre><code>var ErrNotFound = errors.New("not found")
+
+// Somewhere deep in the call chain, this error was wrapped:
+// fmt.Errorf("GetCouponByID: %w", ErrNotFound)
+
+// Check if the chain contains ErrNotFound:
+if errors.Is(err, ErrNotFound) {
+  // return HTTP 404
+}
+
+// Extract a typed error:
+var validationErr *ValidationError
+if errors.As(err, &amp;validationErr) {
+  fmt.Println(validationErr.Field)
+}</code></pre>
+  </section>
+
+  <section>
+    <h2>Creating Custom Errors</h2>
+    <pre><code>type ValidationError struct {
+  Field   string
+  Message string
+}
+
+func (e *ValidationError) Error() string {
+  return fmt.Sprintf("validation failed on %s: %s", e.Field, e.Message)
+}</code></pre>
+    <p>Any type with an <code>Error() string</code> method satisfies the <code>error</code> interface.</p>
+  </section>
+
+  <section>
+    <h2>panic — When to Use It</h2>
+    <div class="callout warning">
+      <strong>Do not use panic for business logic errors.</strong> panic is for programmer mistakes (impossible state, nil where nil should never occur). Always return an error instead.
+    </div>
+    <pre><code>// BAD — don't do this
+func GetUser(id string) *User {
+  user, err := db.Find(id)
+  if err != nil {
+    panic(err) // kills the server!
+  }
+  return user
+}
+
+// GOOD
+func GetUser(id string) (*User, error) {
+  user, err := db.Find(id)
+  if err != nil {
+    return nil, fmt.Errorf("GetUser: %w", err)
+  }
+  return user, nil
+}</code></pre>
+    <p>Fiber's <code>recover</code> middleware catches panics at the HTTP boundary, but you should never rely on it for expected error cases.</p>
+  </section>
+
+  <div class="takeaways">
+    <h3>Key Takeaways</h3>
+    <ul>
+      <li>Functions return <code>(T, error)</code> — check <code>err != nil</code> immediately after every call</li>
+      <li>Wrap errors with <code>fmt.Errorf("context: %w", err)</code> — adds breadcrumb, preserves chain</li>
+      <li>Use <code>errors.Is</code> to check for a specific sentinel error anywhere in the chain</li>
+      <li>Use <code>errors.As</code> to extract a typed error from the chain</li>
+      <li><code>panic</code> is for programmer bugs, not expected failures — always return an error instead</li>
+    </ul>
+  </div>
+
+</main>
+<script src="../js/nav.js"></script>
+</body>
+</html>
