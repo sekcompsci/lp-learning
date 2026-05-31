@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>05 · Anti-Patterns — LP Go Learning</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+<nav id="lesson-nav"></nav>
+<main class="lesson-page">
+
+  <span class="badge craft">Craft</span>
+  <h1>05 · Anti-Patterns</h1>
+  <p class="subtitle">Common Go mistakes — recognize and avoid them</p>
+
+  <section>
+    <h2>Ignoring Errors</h2>
+    <div class="callout warning">
+      <strong>Never use <code>_</code> to discard an error unless you have an explicit reason.</strong>
+    </div>
+    <pre><code>// BAD
+result, _ := db.Query("SELECT ...")  // error silently dropped
+
+// GOOD
+result, err := db.Query("SELECT ...")
+if err != nil {
+  return fmt.Errorf("query failed: %w", err)
+}</code></pre>
+  </section>
+
+  <section>
+    <h2>Goroutine Leaks</h2>
+    <p>Goroutines are cheap, but leaking them (starting without a way to stop) exhausts memory over time.</p>
+    <pre><code>// BAD — goroutine runs forever with no way to cancel
+go func() {
+  for {
+    process()
+    time.Sleep(time.Second)
+  }
+}()
+
+// GOOD — use a context for cancellation
+go func(ctx context.Context) {
+  for {
+    select {
+    case &lt;-ctx.Done():
+      return // exits cleanly
+    default:
+      process()
+      time.Sleep(time.Second)
+    }
+  }
+}(ctx)</code></pre>
+  </section>
+
+  <section>
+    <h2>Global Mutable State</h2>
+    <pre><code>// BAD — package-level var shared across all requests
+var currentUser string
+
+func HandleRequest(c *fiber.Ctx) error {
+  currentUser = c.Get("X-User-ID") // race condition!
+  return process()
+}
+
+// GOOD — pass state through context or function arguments
+func HandleRequest(c *fiber.Ctx) error {
+  userID := c.Get("X-User-ID")
+  return process(c.UserContext(), userID)
+}</code></pre>
+  </section>
+
+  <section>
+    <h2>Panic in Library / Handler Code</h2>
+    <pre><code>// BAD
+func GetCoupon(id string) *Coupon {
+  if id == "" {
+    panic("id cannot be empty") // kills the server process
+  }
+  // ...
+}
+
+// GOOD
+func GetCoupon(id string) (*Coupon, error) {
+  if id == "" {
+    return nil, errors.New("id cannot be empty")
+  }
+  // ...
+}</code></pre>
+  </section>
+
+  <section>
+    <h2>Overusing <code>interface{}</code> / <code>any</code></h2>
+    <pre><code>// BAD — loses all type safety
+func Process(data interface{}) {
+  // need type assertions everywhere, runtime panics if wrong
+  name := data.(map[string]string)["name"]
+}
+
+// GOOD — define a concrete type
+type ProcessInput struct {
+  Name string
+}
+func Process(data ProcessInput) {
+  name := data.Name
+}</code></pre>
+  </section>
+
+  <section>
+    <h2><code>init()</code> Abuse</h2>
+    <p><code>init()</code> runs automatically when a package is imported — before <code>main()</code>. Surprising side effects (DB connections, file reads) in <code>init()</code> make code hard to test and reason about.</p>
+    <pre><code>// BAD
+func init() {
+  db = connectToDatabase() // side effect on import
+}
+
+// GOOD — explicit initialization in main
+func main() {
+  db, err := connectToDatabase()
+  if err != nil { log.Fatal(err) }
+  // pass db to routes/handlers
+}</code></pre>
+  </section>
+
+  <div class="takeaways">
+    <h3>Key Takeaways</h3>
+    <ul>
+      <li>Never discard errors with <code>_</code> unless intentional and commented</li>
+      <li>Every goroutine needs an exit path — use <code>ctx.Done()</code></li>
+      <li>Avoid package-level mutable state — pass through context or arguments</li>
+      <li>Return errors from handlers/services — never panic for expected failure cases</li>
+      <li>Avoid <code>interface{}</code>/<code>any</code> — define concrete types instead</li>
+      <li>Keep <code>init()</code> side-effect free — initialize explicitly in <code>main()</code></li>
+    </ul>
+  </div>
+
+</main>
+<script src="../js/nav.js"></script>
+</body>
+</html>
