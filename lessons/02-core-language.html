@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>02 · Core Language — LP Go Learning</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+<nav id="lesson-nav"></nav>
+<main class="lesson-page">
+
+  <span class="badge foundation">Foundation</span>
+  <h1>02 · Core Language</h1>
+  <p class="subtitle">Structs, interfaces, pointers, slices, maps, defer</p>
+
+  <div class="callout analogy">
+    <strong>Node.js background?</strong>
+    Structs are like plain objects with a fixed shape. Interfaces are like TypeScript interfaces but satisfied implicitly — no <code>implements</code> keyword. Pointers are new but simple.
+  </div>
+
+  <section>
+    <h2>Structs</h2>
+    <p>A struct is a named set of fields. Think of it as a typed object shape.</p>
+    <pre><code>type Coupon struct {
+  ID     string
+  Name   string
+  Status string
+}
+
+c := Coupon{ID: "abc", Name: "10% Off", Status: "active"}
+fmt.Println(c.Name) // "10% Off"</code></pre>
+    <p>Methods attach behavior to a struct using a <strong>receiver</strong>:</p>
+    <pre><code>func (c Coupon) IsActive() bool {
+  return c.Status == "active"
+}
+
+// Value receiver (c is a copy) — use for read-only methods
+// Pointer receiver (*Coupon) — use when the method modifies the struct</code></pre>
+  </section>
+
+  <section>
+    <h2>Interfaces</h2>
+    <p>An interface defines a set of methods. Any type that has those methods satisfies the interface — no declaration needed.</p>
+    <pre><code>type Stringer interface {
+  String() string
+}
+
+type Coupon struct { Name string }
+
+func (c Coupon) String() string { return "Coupon: " + c.Name }
+
+// Coupon satisfies Stringer automatically — no "implements" keyword
+var s Stringer = Coupon{Name: "10% Off"}
+fmt.Println(s.String())</code></pre>
+    <div class="callout analogy">
+      <strong>Node.js analogy:</strong> Like TypeScript structural typing — if an object has the required methods, it matches the interface. Duck typing, but checked at compile time.
+    </div>
+  </section>
+
+  <section>
+    <h2>Pointers</h2>
+    <p>Go passes values by copy. To modify the original, pass a pointer.</p>
+    <pre><code>x := 10
+p := &amp;x  // p is a *int — pointer to x
+*p = 20   // dereference and assign
+fmt.Println(x) // 20</code></pre>
+    <p>Use pointer receivers when a method needs to modify the struct or when the struct is large (avoids copying):</p>
+    <pre><code>func (c *Coupon) Deactivate() {
+  c.Status = "inactive"  // modifies the original
+}</code></pre>
+    <div class="callout tip">
+      <strong>Rule of thumb:</strong> If in doubt, use a pointer receiver. Mixing value and pointer receivers on the same type causes problems.
+    </div>
+  </section>
+
+  <section>
+    <h2>Slices</h2>
+    <p>Slices are dynamic arrays. The zero value is <code>nil</code>, which behaves like an empty slice for <code>append</code> and <code>range</code>.</p>
+    <pre><code>var names []string            // nil slice — safe to use
+names = append(names, "Alice")
+names = append(names, "Bob")
+
+for i, name := range names {
+  fmt.Println(i, name)
+}</code></pre>
+  </section>
+
+  <section>
+    <h2>Maps</h2>
+    <pre><code>scores := map[string]int{
+  "Alice": 95,
+  "Bob":   87,
+}
+
+// Read — always check if key exists
+score, ok := scores["Alice"]
+if ok {
+  fmt.Println(score)
+}
+
+// Delete
+delete(scores, "Bob")</code></pre>
+    <div class="callout warning">
+      <strong>Never read from a nil map</strong> (it returns zero value), but writing to a nil map panics. Always initialize: <code>scores := make(map[string]int)</code>.
+    </div>
+  </section>
+
+  <section>
+    <h2>defer</h2>
+    <p><code>defer</code> schedules a function call to run when the surrounding function returns. Use it for cleanup.</p>
+    <pre><code>func readFile(path string) error {
+  f, err := os.Open(path)
+  if err != nil {
+    return err
+  }
+  defer f.Close() // runs when readFile returns, regardless of how
+
+  // ... read file
+  return nil
+}</code></pre>
+    <div class="callout analogy">
+      <strong>Node.js analogy:</strong> Like a <code>finally</code> block, but attached to the function instead of a try/catch, and it stacks (multiple defers run in LIFO order).
+    </div>
+  </section>
+
+  <div class="takeaways">
+    <h3>Key Takeaways</h3>
+    <ul>
+      <li>Structs = typed object shapes. Methods attach via receivers.</li>
+      <li>Interfaces are satisfied implicitly — no <code>implements</code>.</li>
+      <li>Use pointer receivers (<code>*T</code>) to modify a struct or avoid copying.</li>
+      <li>Slices grow with <code>append()</code>. Maps need initialization before writing.</li>
+      <li><code>defer</code> runs cleanup when a function returns — use it for file/connection closes.</li>
+    </ul>
+  </div>
+
+</main>
+<script src="../js/nav.js"></script>
+</body>
+</html>
