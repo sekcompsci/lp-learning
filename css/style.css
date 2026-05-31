@@ -1,0 +1,201 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+  color: #1a1a1a;
+  background: #f8f8f8;
+}
+
+a { color: #1a6fa0; text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* ── Shared container ── */
+.container { max-width: 960px; margin: 0 auto; padding: 0 24px; }
+
+/* ── Lesson nav (injected by nav.js) ── */
+#lesson-nav {
+  position: sticky;
+  top: 0;
+  background: #fff;
+  border-bottom: 1px solid #e0e0e0;
+  z-index: 100;
+  padding: 10px 24px;
+}
+.nav-inner {
+  max-width: 760px;
+  margin: 0 auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  font-size: 14px;
+}
+.nav-back { color: #666; }
+.nav-steps { display: flex; gap: 24px; }
+.nav-prev, .nav-next { color: #1a6fa0; white-space: nowrap; }
+
+/* ── Group badges ── */
+.badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 3px 10px;
+  border-radius: 12px;
+  margin-bottom: 12px;
+}
+.badge.foundation { background: #deedf7; color: #1a6fa0; }
+.badge.craft       { background: #dff0d8; color: #3a7a10; }
+.badge.project     { background: #fde8d0; color: #b05010; }
+
+/* ── Index page ── */
+.site-header {
+  background: #fff;
+  border-bottom: 1px solid #e0e0e0;
+  padding: 32px 24px 24px;
+  text-align: center;
+}
+.site-header h1 { font-size: 28px; font-weight: 800; }
+.site-header p  { color: #666; margin-top: 6px; }
+
+.index-main { max-width: 960px; margin: 0 auto; padding: 32px 24px 64px; }
+
+.group-section { margin-bottom: 40px; }
+.group-section h2 {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-bottom: 14px;
+  padding-bottom: 6px;
+  border-bottom: 2px solid currentColor;
+}
+.group-section.foundation h2 { color: #1a6fa0; border-color: #90c4e0; }
+.group-section.craft h2      { color: #3a7a10; border-color: #8dc45a; }
+.group-section.project h2    { color: #b05010; border-color: #e0a060; }
+
+.module-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+.module-card {
+  background: #fff;
+  border: 1px solid #e4e4e4;
+  border-radius: 8px;
+  padding: 16px;
+  display: block;
+  color: inherit;
+  transition: box-shadow 0.15s, border-color 0.15s;
+}
+.module-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.1); text-decoration: none; }
+.foundation .module-card:hover { border-color: #90c4e0; }
+.craft .module-card:hover      { border-color: #8dc45a; }
+.project .module-card:hover    { border-color: #e0a060; }
+
+.card-num { font-size: 12px; color: #aaa; margin-bottom: 4px; }
+.card-title { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+.card-desc  { font-size: 13px; color: #666; }
+
+/* ── Lesson page ── */
+.lesson-page {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 40px 24px 80px;
+}
+.lesson-page h1 { font-size: 28px; font-weight: 800; margin-bottom: 4px; }
+.lesson-page .subtitle { color: #666; margin-bottom: 24px; }
+
+.lesson-page section { margin-bottom: 36px; }
+.lesson-page h2 {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #eee;
+}
+.lesson-page h3 { font-size: 15px; font-weight: 600; margin: 16px 0 8px; }
+.lesson-page p  { margin-bottom: 12px; }
+.lesson-page ul, .lesson-page ol { padding-left: 20px; margin-bottom: 12px; }
+.lesson-page li { margin-bottom: 4px; }
+
+/* ── Callouts ── */
+.callout {
+  border-radius: 6px;
+  padding: 14px 16px;
+  margin-bottom: 24px;
+  font-size: 14px;
+}
+.callout.analogy  { background: #fff8e6; border-left: 4px solid #f0b020; }
+.callout.tip      { background: #e8f4fb; border-left: 4px solid #1a6fa0; }
+.callout.warning  { background: #fdecea; border-left: 4px solid #d32f2f; }
+.callout strong   { display: block; margin-bottom: 4px; }
+
+/* ── Code blocks ── */
+pre {
+  background: #1e1e1e;
+  color: #d4d4d4;
+  border-radius: 6px;
+  padding: 16px;
+  overflow-x: auto;
+  font-size: 13px;
+  line-height: 1.5;
+  margin-bottom: 16px;
+}
+code {
+  font-family: 'SF Mono', 'Fira Code', Consolas, monospace;
+  font-size: 0.9em;
+}
+pre code { font-size: inherit; background: none; padding: 0; }
+p code, li code {
+  background: #f0f0f0;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 0.88em;
+}
+
+.code-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: #888;
+  margin-bottom: 4px;
+}
+
+.split-code {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+@media (max-width: 600px) { .split-code { grid-template-columns: 1fr; } }
+
+/* ── Takeaways ── */
+.takeaways {
+  background: #f0f8e8;
+  border: 1px solid #8dc45a;
+  border-radius: 8px;
+  padding: 20px 24px;
+  margin-top: 40px;
+}
+.takeaways h3 { font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #3a7a10; margin-bottom: 10px; }
+.takeaways ul { padding-left: 18px; }
+.takeaways li { margin-bottom: 6px; font-size: 14px; }
+
+/* ── File tree ── */
+.file-tree {
+  background: #1e1e1e;
+  color: #d4d4d4;
+  border-radius: 6px;
+  padding: 16px;
+  font-family: 'SF Mono', Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.7;
+  margin-bottom: 16px;
+}
+.file-tree .dir   { color: #9cdcfe; }
+.file-tree .ann   { color: #6a9955; font-style: italic; }
