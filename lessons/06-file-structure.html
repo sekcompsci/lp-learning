@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>06 · File Structure — LP Go Learning</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+<nav id="lesson-nav"></nav>
+<main class="lesson-page">
+
+  <span class="badge project">Project</span>
+  <h1>06 · File Structure</h1>
+  <p class="subtitle">Navigating the lp-coupon-api and lp-reward-store-api repos</p>
+
+  <section>
+    <h2>lp-coupon-api Layout</h2>
+    <div class="file-tree"><span class="dir">lp-coupon-api/</span>
+├── main.go                   <span class="ann">← entry point, app wiring, graceful shutdown</span>
+├── go.mod                    <span class="ann">← dependency list (like package.json)</span>
+├── go.sum                    <span class="ann">← dependency lock (like package-lock.json)</span>
+├── Makefile                  <span class="ann">← dev commands: make run, make test, make build</span>
+├── Dockerfile
+├── docker-compose.yml
+├── <span class="dir">config/</span>
+│   └── config.go             <span class="ann">← Viper config loading from env vars</span>
+├── <span class="dir">database/</span>
+│   └── connection.go         <span class="ann">← GORM connection manager with retry logic</span>
+├── <span class="dir">internal/</span>             <span class="ann">← private: cannot be imported by external packages</span>
+│   ├── <span class="dir">handlers/</span>         <span class="ann">← HTTP layer: parse request, call service, format response</span>
+│   ├── <span class="dir">services/</span>         <span class="ann">← Business logic layer</span>
+│   ├── <span class="dir">repository/</span>       <span class="ann">← Data access layer (GORM queries)</span>
+│   │   └── interfaces.go     <span class="ann">← All repo contracts defined here</span>
+│   ├── <span class="dir">models/</span>           <span class="ann">← GORM entity structs (Coupon, UserCoupon, ...)</span>
+│   ├── <span class="dir">middleware/</span>       <span class="ann">← Fiber middleware: auth, logging, rate limit, pagination</span>
+│   ├── <span class="dir">clients/</span>          <span class="ann">← External HTTP clients (ECI), Redis, Kafka</span>
+│   ├── <span class="dir">routes/</span>
+│   │   └── routes.go         <span class="ann">← Dependency injection + route registration</span>
+│   └── <span class="dir">constants/</span>        <span class="ann">← Error codes, status enums</span>
+├── <span class="dir">pkg/</span>                  <span class="ann">← Public reusable utilities (can be imported externally)</span>
+│   ├── <span class="dir">logger/</span>           <span class="ann">← Structured logger wrapper</span>
+│   ├── <span class="dir">zlog/</span>             <span class="ann">← Low-level zerolog interface used in services/repos</span>
+│   ├── <span class="dir">retryer/</span>          <span class="ann">← Configurable retry with backoff or fixed delay</span>
+│   ├── <span class="dir">ratelimit/</span>        <span class="ann">← Redis-backed rate limit key helpers</span>
+│   ├── <span class="dir">helpers/</span>          <span class="ann">← Cache key builder, misc utilities</span>
+│   ├── <span class="dir">pagination/</span>       <span class="ann">← Pagination parameter parsing</span>
+│   └── <span class="dir">context/</span>          <span class="ann">← Context helpers: get client, trace ID, user ID</span>
+├── <span class="dir">scripts/</span>
+│   └── <span class="dir">migration/</span>        <span class="ann">← SQL migration files + migrate.sh runner</span>
+└── <span class="dir">tests/</span>               <span class="ann">← Integration tests</span></div>
+  </section>
+
+  <section>
+    <h2>The <code>internal/</code> Rule</h2>
+    <p>Go enforces that code in <code>internal/</code> can only be imported by code in the parent directory tree. It is not accessible to external packages or other repos. Use it for everything that is specific to this service.</p>
+    <p><code>pkg/</code> has no such restriction — it is meant for utilities that could theoretically be shared (logger, retryer, helpers).</p>
+  </section>
+
+  <section>
+    <h2>Where to Add New Code</h2>
+    <table style="width:100%;border-collapse:collapse;font-size:14px;">
+      <thead>
+        <tr style="background:#f0f0f0;">
+          <th style="text-align:left;padding:8px;border:1px solid #ddd;">What you're adding</th>
+          <th style="text-align:left;padding:8px;border:1px solid #ddd;">Where it goes</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td style="padding:8px;border:1px solid #ddd;">New API endpoint</td><td style="padding:8px;border:1px solid #ddd;"><code>internal/handlers/</code> + wire in <code>routes/routes.go</code></td></tr>
+        <tr><td style="padding:8px;border:1px solid #ddd;">Business logic</td><td style="padding:8px;border:1px solid #ddd;"><code>internal/services/</code></td></tr>
+        <tr><td style="padding:8px;border:1px solid #ddd;">Database query</td><td style="padding:8px;border:1px solid #ddd;"><code>internal/repository/</code> + add method to interface in <code>interfaces.go</code></td></tr>
+        <tr><td style="padding:8px;border:1px solid #ddd;">New DB table</td><td style="padding:8px;border:1px solid #ddd;"><code>internal/models/</code> + new migration in <code>scripts/migration/sql/</code></td></tr>
+        <tr><td style="padding:8px;border:1px solid #ddd;">New env config variable</td><td style="padding:8px;border:1px solid #ddd;"><code>config/config.go</code> + <code>.env.example</code></td></tr>
+        <tr><td style="padding:8px;border:1px solid #ddd;">New middleware</td><td style="padding:8px;border:1px solid #ddd;"><code>internal/middleware/</code> + register in <code>main.go</code> <code>initFiber()</code></td></tr>
+        <tr><td style="padding:8px;border:1px solid #ddd;">Reusable utility</td><td style="padding:8px;border:1px solid #ddd;"><code>pkg/</code></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>lp-reward-store-api Differences</h2>
+    <p>Same layered structure, but uses MongoDB instead of PostgreSQL (no GORM — uses the official MongoDB driver). No <code>scripts/migration/</code> directory. Same <code>pkg/</code> utilities pattern.</p>
+  </section>
+
+  <div class="takeaways">
+    <h3>Key Takeaways</h3>
+    <ul>
+      <li><code>internal/</code> = private to this repo. <code>pkg/</code> = shareable utilities.</li>
+      <li>All dependency wiring happens in <code>internal/routes/routes.go</code>.</li>
+      <li>All repository contracts are in <code>internal/repository/interfaces.go</code> — add new methods there first.</li>
+      <li>New endpoints: add handler → service → repo → wire in routes.go → add interface method.</li>
+    </ul>
+  </div>
+
+</main>
+<script src="../js/nav.js"></script>
+</body>
+</html>
