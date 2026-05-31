@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>01 · Go for JS Developers — LP Go Learning</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+<nav id="lesson-nav"></nav>
+<main class="lesson-page">
+
+  <span class="badge foundation">Foundation</span>
+  <h1>01 · Go for JS Developers</h1>
+  <p class="subtitle">Mental model shift from JavaScript / Node.js to Go</p>
+
+  <div class="callout analogy">
+    <strong>Node.js background?</strong>
+    This module maps Go concepts directly to JavaScript equivalents. You will recognize the problems Go solves — just the solutions look different.
+  </div>
+
+  <section>
+    <h2>Static Typing</h2>
+    <p>Go checks types at compile time. No runtime surprises from unexpected types.</p>
+    <div class="split-code">
+      <div>
+        <div class="code-label">JavaScript</div>
+        <pre><code>let name = "Alice";
+let age = 30;
+age = "thirty"; // valid, no error</code></pre>
+      </div>
+      <div>
+        <div class="code-label">Go</div>
+        <pre><code>name := "Alice"  // string inferred
+age := 30        // int inferred
+// age = "thirty" → compile error</code></pre>
+      </div>
+    </div>
+    <p>The <code>:=</code> operator infers the type once. After that, the type is fixed. Use <code>var x int</code> when you want to declare without assigning.</p>
+  </section>
+
+  <section>
+    <h2>Zero Values — No <code>undefined</code></h2>
+    <p>Every variable in Go has a default value. There is no <code>undefined</code>.</p>
+    <pre><code>var i int     // 0
+var s string  // ""
+var b bool    // false
+var p *int    // nil  (pointers, slices, maps, interfaces can be nil)</code></pre>
+    <div class="callout analogy">
+      <strong>Node.js analogy:</strong> Like TypeScript with strict null checks on — but zero values are built into the language, not a compiler option.
+    </div>
+  </section>
+
+  <section>
+    <h2>Multiple Return Values</h2>
+    <p>Go functions can return more than one value. The convention is <code>(result, error)</code>.</p>
+    <div class="split-code">
+      <div>
+        <div class="code-label">JavaScript (throw/catch)</div>
+        <pre><code>function divide(a, b) {
+  if (b === 0) throw new Error("div by zero");
+  return a / b;
+}
+
+try {
+  const result = divide(10, 0);
+} catch (err) {
+  console.error(err.message);
+}</code></pre>
+      </div>
+      <div>
+        <div class="code-label">Go (return error)</div>
+        <pre><code>func divide(a, b float64) (float64, error) {
+  if b == 0 {
+    return 0, errors.New("div by zero")
+  }
+  return a / b, nil
+}
+
+result, err := divide(10, 0)
+if err != nil {
+  fmt.Println(err)
+}</code></pre>
+      </div>
+    </div>
+    <p>The caller decides what to do with the error. Nothing is thrown — you must check <code>err != nil</code> explicitly. See lesson 03 for the full error handling pattern.</p>
+  </section>
+
+  <section>
+    <h2>Packages — Not <code>require()</code></h2>
+    <p>Go code is organized in packages. Import them with their module path.</p>
+    <div class="split-code">
+      <div>
+        <div class="code-label">Node.js</div>
+        <pre><code>const fs = require('fs');
+const express = require('express');
+// package.json tracks deps</code></pre>
+      </div>
+      <div>
+        <div class="code-label">Go</div>
+        <pre><code>import (
+  "os"
+  "github.com/gofiber/fiber/v2"
+)
+// go.mod tracks deps (like package.json)
+// go.sum locks versions (like package-lock.json)</code></pre>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>No Classes — Structs + Methods</h2>
+    <p>Go has no <code>class</code> keyword. Use a struct to group data, then attach methods to it.</p>
+    <div class="split-code">
+      <div>
+        <div class="code-label">JavaScript</div>
+        <pre><code>class User {
+  constructor(name, age) {
+    this.name = name;
+    this.age = age;
+  }
+  greet() {
+    return `Hi, I'm ${this.name}`;
+  }
+}</code></pre>
+      </div>
+      <div>
+        <div class="code-label">Go</div>
+        <pre><code>type User struct {
+  Name string
+  Age  int
+}
+
+func (u User) Greet() string {
+  return "Hi, I'm " + u.Name
+}
+
+// Usage:
+u := User{Name: "Alice", Age: 30}
+fmt.Println(u.Greet())</code></pre>
+      </div>
+    </div>
+    <p>No inheritance. Use composition and interfaces instead (covered in lesson 02).</p>
+  </section>
+
+  <div class="takeaways">
+    <h3>Key Takeaways</h3>
+    <ul>
+      <li>Types are fixed at compile time — <code>:=</code> infers, <code>var x int</code> declares explicitly</li>
+      <li>No <code>undefined</code> — every variable has a zero value (<code>0</code>, <code>""</code>, <code>false</code>, <code>nil</code>)</li>
+      <li>Functions return <code>(result, error)</code> — always check <code>err != nil</code></li>
+      <li><code>go.mod</code> = <code>package.json</code>, <code>go.sum</code> = <code>package-lock.json</code></li>
+      <li>No classes — structs + methods. No <code>this</code> — use the receiver variable name (<code>u User</code>)</li>
+    </ul>
+  </div>
+
+</main>
+<script src="../js/nav.js"></script>
+</body>
+</html>
