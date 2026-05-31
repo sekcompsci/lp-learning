@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>10 · Dev Environment — LP Go Learning</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+<nav id="lesson-nav"></nav>
+<main class="lesson-page">
+
+  <span class="badge project">Project</span>
+  <h1>10 · Dev Environment</h1>
+  <p class="subtitle">First-run checklist — from clone to running API</p>
+
+  <section>
+    <h2>Prerequisites</h2>
+    <ul>
+      <li>Go 1.21+ — <code>go version</code> to verify</li>
+      <li>Docker Desktop (for postgres + redis via docker-compose)</li>
+      <li><code>make</code> — available by default on macOS/Linux</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>First Run — lp-coupon-api</h2>
+    <pre><code># 1. Clone
+git clone &lt;repo-url&gt; lp-coupon-api
+cd lp-coupon-api
+
+# 2. Copy env
+cp .env.example .env
+# Edit .env — set DB_PASSWORD, ALLOWED_CLIENTS (see .env.example comments)
+
+# 3. Start dependencies (PostgreSQL + Redis)
+make compose-up
+# Wait ~10 seconds for postgres to be healthy
+
+# 4. Run migrations
+cd scripts/migration
+./migrate.sh up
+cd ../..
+
+# 5. Start the API
+make run
+# Output: "Starting HTTP server" on port 8080
+
+# 6. Verify
+curl http://localhost:8080/coupon/api/health</code></pre>
+  </section>
+
+  <section>
+    <h2>Make Commands Reference</h2>
+    <table style="width:100%;border-collapse:collapse;font-size:14px;">
+      <thead>
+        <tr style="background:#f0f0f0;">
+          <th style="text-align:left;padding:8px;border:1px solid #ddd;">Command</th>
+          <th style="text-align:left;padding:8px;border:1px solid #ddd;">What it does</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td style="padding:8px;border:1px solid #ddd;"><code>make run</code></td><td style="padding:8px;border:1px solid #ddd;">Start the API locally (go run main.go)</td></tr>
+        <tr><td style="padding:8px;border:1px solid #ddd;"><code>make build</code></td><td style="padding:8px;border:1px solid #ddd;">Compile binary to <code>bin/api</code> with version injected</td></tr>
+        <tr><td style="padding:8px;border:1px solid #ddd;"><code>make tidy</code></td><td style="padding:8px;border:1px solid #ddd;">Format code (<code>go fmt ./...</code>) + tidy go.mod</td></tr>
+        <tr><td style="padding:8px;border:1px solid #ddd;"><code>make test</code></td><td style="padding:8px;border:1px solid #ddd;">Run all tests with verbose output</td></tr>
+        <tr><td style="padding:8px;border:1px solid #ddd;"><code>make test-coverage</code></td><td style="padding:8px;border:1px solid #ddd;">Generate <code>coverage.html</code> — open in browser</td></tr>
+        <tr><td style="padding:8px;border:1px solid #ddd;"><code>make audit</code></td><td style="padding:8px;border:1px solid #ddd;">go vet + staticcheck + race detector</td></tr>
+        <tr><td style="padding:8px;border:1px solid #ddd;"><code>make compose-up</code></td><td style="padding:8px;border:1px solid #ddd;">Start PostgreSQL + Redis via Docker</td></tr>
+        <tr><td style="padding:8px;border:1px solid #ddd;"><code>make compose-down</code></td><td style="padding:8px;border:1px solid #ddd;">Stop all Docker services</td></tr>
+        <tr><td style="padding:8px;border:1px solid #ddd;"><code>make compose-logs</code></td><td style="padding:8px;border:1px solid #ddd;">Tail service logs</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>ALLOWED_CLIENTS Setup</h2>
+    <p>Basic auth credentials are stored as a base64-encoded JSON array in the env var:</p>
+    <pre><code># Generate the value:
+echo '[{"username":"dev","password":"secret"}]' | base64
+
+# Paste result into .env:
+ALLOWED_CLIENTS=W3sidXNlcm5hbWUiOiJkZXYiLCJwYXNzd29yZCI6InNlY3JldCJ9XQ==
+
+# Test with curl:
+curl -u dev:secret http://localhost:8080/coupon/api/v1/coupon/</code></pre>
+  </section>
+
+  <section>
+    <h2>Adding a Dependency</h2>
+    <pre><code># Add a new library
+go get github.com/some/library@v1.2.3
+
+# Tidy (removes unused, updates go.sum)
+go mod tidy
+# or: make tidy</code></pre>
+    <p>After adding: update <code>lp-go-learning/COVERAGE.md</code> if it's a significant new integration (see the site README).</p>
+  </section>
+
+  <div class="takeaways">
+    <h3>Key Takeaways</h3>
+    <ul>
+      <li><code>cp .env.example .env</code> — always do this first, never commit <code>.env</code></li>
+      <li><code>make compose-up</code> starts dependencies; <code>./migrate.sh up</code> applies DB migrations</li>
+      <li><code>make tidy</code> before committing — formats code and keeps go.mod clean</li>
+      <li><code>make audit</code> runs the race detector — catches concurrency bugs locally</li>
+    </ul>
+  </div>
+
+</main>
+<script src="../js/nav.js"></script>
+</body>
+</html>
