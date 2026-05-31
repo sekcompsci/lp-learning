@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>12 · Build &amp; Deploy — LP Go Learning</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+<nav id="lesson-nav"></nav>
+<main class="lesson-page">
+
+  <span class="badge project">Project</span>
+  <h1>12 · Build &amp; Deploy</h1>
+  <p class="subtitle">make build, Dockerfile, GitLab CI, blue/green deployment</p>
+
+  <section>
+    <h2>Building the Binary</h2>
+    <pre><code># Compile to bin/api with version string injected
+make build
+
+# Equivalent command:
+go build -ldflags "-X main.Version=$(git describe --tags --always)" -o bin/api .
+
+# Run the binary directly
+./bin/api</code></pre>
+    <p>The <code>Version</code> variable in <code>main.go</code> gets the git tag at build time. It appears in the <code>/health</code> and <code>/</code> responses so you know exactly which version is running.</p>
+  </section>
+
+  <section>
+    <h2>Dockerfile</h2>
+    <pre><code># Multi-stage build: builder stage compiles, final stage is minimal
+FROM golang:1.21-alpine AS builder
+WORKDIR /app
+COPY go.mod go.sum ./
+RUN go mod download          # cache dependencies as a layer
+COPY . .
+RUN go build -o bin/api .
+
+FROM alpine:latest           # minimal final image (~10MB)
+COPY --from=builder /app/bin/api /api
+ENTRYPOINT ["/api"]</code></pre>
+    <p>Multi-stage builds keep the final image small — no Go compiler, no source code. Only the binary.</p>
+  </section>
+
+  <section>
+    <h2>GitLab CI Pipeline</h2>
+    <p>Defined in <code>.gitlab-ci.yml</code>. Key stages:</p>
+    <pre><code>stages:
+  - test      # go test ./...
+  - build     # docker build + push to registry
+  - deploy    # update Kubernetes deployment
+
+# Deploy stage uses environment-specific variables
+deploy:
+  script:
+    - kubectl set image deployment/lp-coupon-api
+        api=$CI_REGISTRY_IMAGE:$CI_COMMIT_SHA</code></pre>
+    <p>The image tag is the commit SHA — every push creates a unique, traceable image.</p>
+  </section>
+
+  <section>
+    <h2>Blue/Green Deployment</h2>
+    <p>Blue/green keeps two identical environments. Traffic switches between them at deploy time, enabling instant rollback.</p>
+    <pre><code>Blue environment  (currently live — receiving traffic)
+Green environment (new version deployed here)
+
+Deploy steps:
+1. Deploy new version to Green (blue still serves traffic)
+2. Run smoke tests against Green
+3. Switch load balancer: 100% traffic → Green
+4. Green is now live, Blue is idle (rollback target)
+
+Rollback:
+- Switch load balancer back to Blue (seconds, not minutes)
+- No re-deploy needed</code></pre>
+    <div class="callout tip">
+      <strong>Zero-downtime:</strong> Traffic switch is instantaneous. No requests are dropped. In-flight requests on Blue complete normally before Blue goes idle.
+    </div>
+    <p>In Kubernetes, this is implemented with two <code>Deployment</code> objects and a <code>Service</code> selector that points to one label (<code>slot: blue</code> or <code>slot: green</code>). Switching means patching the Service selector.</p>
+  </section>
+
+  <div class="takeaways">
+    <h3>Key Takeaways</h3>
+    <ul>
+      <li><code>make build</code> injects git version into the binary via ldflags</li>
+      <li>Multi-stage Dockerfile: compile in Go image, run in Alpine (~10MB final image)</li>
+      <li>CI pipeline: test → build Docker image (tagged with commit SHA) → deploy</li>
+      <li>Blue/green: two environments, switch traffic instantly, rollback = switch back</li>
+    </ul>
+  </div>
+
+</main>
+<script src="../js/nav.js"></script>
+</body>
+</html>
