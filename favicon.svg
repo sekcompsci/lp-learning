@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Background: Go blue rounded square -->
+  <rect width="32" height="32" rx="7" fill="#00ACD7"/>
+
+  <!-- Gopher ears -->
+  <ellipse cx="7.5" cy="7.5" rx="4" ry="4.5" fill="#5DC9E2"/>
+  <ellipse cx="24.5" cy="7.5" rx="4" ry="4.5" fill="#5DC9E2"/>
+  <ellipse cx="7.5" cy="7.5" rx="2.2" ry="2.7" fill="#F4B8B8"/>
+  <ellipse cx="24.5" cy="7.5" rx="2.2" ry="2.7" fill="#F4B8B8"/>
+
+  <!-- Head/body -->
+  <ellipse cx="16" cy="18" rx="10.5" ry="10" fill="#5DC9E2"/>
+
+  <!-- Left eye white -->
+  <circle cx="11" cy="14.5" r="4.5" fill="white"/>
+  <!-- Right eye white -->
+  <circle cx="21" cy="14.5" r="4.5" fill="white"/>
+
+  <!-- Left pupil -->
+  <circle cx="12" cy="14.5" r="2.2" fill="#1a1a2e"/>
+  <!-- Right pupil -->
+  <circle cx="22" cy="14.5" r="2.2" fill="#1a1a2e"/>
+
+  <!-- Eye highlights -->
+  <circle cx="11.2" cy="13.2" r="0.9" fill="white" opacity="0.75"/>
+  <circle cx="21.2" cy="13.2" r="0.9" fill="white" opacity="0.75"/>
+
+  <!-- Nose -->
+  <ellipse cx="16" cy="20.5" rx="3" ry="2.2" fill="#C8876A"/>
+  <circle cx="14.8" cy="19.8" r="0.7" fill="white" opacity="0.45"/>
+
+  <!-- Teeth -->
+  <rect x="14" y="22.5" width="2.2" height="2.8" rx="0.6" fill="white"/>
+  <rect x="16.5" y="22.5" width="2.2" height="2.8" rx="0.6" fill="white"/>
+</svg>
