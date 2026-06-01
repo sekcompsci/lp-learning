@@ -1,6 +1,6 @@
-# LP Go Learning
+# LP Learning
 
-Onboarding site for developers joining the LP Go/Fiber team from a React / Nest.js background. 13 modules: Foundation → Craft → Project.
+Onboarding site for developers joining the LP Go/Fiber team from a Node.js background. 13 modules: Foundation → Craft → Project.
 
 ## Open locally
 

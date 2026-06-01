@@ -3,14 +3,17 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>02 · Core Language — LP Go Learning</title>
+  <title>02 · Core Language — LP Learning</title>
   <link rel="stylesheet" href="../css/style.css">
 </head>
 <body>
 <nav id="lesson-nav"></nav>
 <main class="lesson-page">
 
-  <span class="badge foundation">Foundation</span>
+  <div class="lesson-header-meta">
+    <span class="badge foundation">Foundation</span>
+    <span class="lesson-time">⏱ 7 min read</span>
+  </div>
   <h1>02 · Core Language</h1>
   <p class="subtitle">Structs, interfaces, pointers, slices, maps, defer</p>
 
@@ -88,6 +91,7 @@ for i, name := range names {
 
   <section>
     <h2>Maps</h2>
+    <p>Maps are key-value stores with string, int, or any comparable type as the key. The zero value is <code>nil</code> — safe to read (returns zero value), but writing to a nil map panics.</p>
     <pre><code>scores := map[string]int{
   "Alice": 95,
   "Bob":   87,

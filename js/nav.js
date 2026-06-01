@@ -1,18 +1,19 @@
 const LESSONS = [
-  { file: "01-go-for-js-devs.html",       title: "Go for JS Developers",    group: "foundation" },
-  { file: "02-core-language.html",          title: "Core Language",            group: "foundation" },
-  { file: "03-error-handling.html",         title: "Error Handling",           group: "foundation" },
-  { file: "04-best-practices.html",         title: "Best Practices",           group: "craft"      },
-  { file: "05-anti-patterns.html",          title: "Anti-Patterns",            group: "craft"      },
-  { file: "06-concurrency.html",             title: "Concurrency",              group: "craft"      },
-  { file: "07-file-structure.html",         title: "File Structure",           group: "project"    },
-  { file: "08-libraries-integrations.html", title: "Libraries & Integrations", group: "project"    },
-  { file: "09-project-standards.html",      title: "Project Standards",        group: "project"    },
-  { file: "10-life-cycle.html",             title: "Life Cycle",               group: "project"    },
-  { file: "11-dev-environment.html",        title: "Dev Environment",          group: "project"    },
-  { file: "12-testing.html",                title: "Testing",                  group: "project"    },
-  { file: "13-build-deploy.html",           title: "Build & Deploy",           group: "project"    },
-  { file: "14-cdc.html",                    title: "Change Data Capture",      group: "project"    },
+  { file: "01-go-for-js-devs.html",          title: "Go for JS Developers",    group: "foundation" },
+  { file: "02-core-language.html",            title: "Core Language",            group: "foundation" },
+  { file: "03-error-handling.html",           title: "Error Handling",           group: "foundation" },
+  { file: "04-best-practices.html",           title: "Best Practices",           group: "craft"      },
+  { file: "05-anti-patterns.html",            title: "Anti-Patterns",            group: "craft"      },
+  { file: "06-concurrency.html",              title: "Concurrency",              group: "craft"      },
+  { file: "07-git-flow.html",                 title: "Git Flow & Commits",       group: "project"    },
+  { file: "08-file-structure.html",           title: "File Structure",           group: "project"    },
+  { file: "09-libraries-integrations.html",   title: "Libraries & Integrations", group: "project"    },
+  { file: "10-project-standards.html",        title: "Project Standards",        group: "project"    },
+  { file: "11-life-cycle.html",               title: "Life Cycle",               group: "project"    },
+  { file: "12-dev-environment.html",          title: "Dev Environment",          group: "project"    },
+  { file: "13-testing.html",                  title: "Testing",                  group: "project"    },
+  { file: "14-build-deploy.html",             title: "Build & Deploy",           group: "project"    },
+  { file: "15-cdc.html",                      title: "Change Data Capture",      group: "project"    },
 ];
 
 const GROUPS = [
@@ -76,7 +77,7 @@ document.addEventListener("DOMContentLoaded", () => {
       <button class="hamburger" aria-label="Toggle navigation" aria-expanded="false">
         <span></span><span></span><span></span>
       </button>
-      <a href="../index.html" class="nav-back">← All Modules</a>
+      <a href="../index.html" class="nav-back" aria-label="Home"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5z"/><polyline points="9 21 9 12 15 12 15 21"/></svg></a>
       <div class="nav-steps">
         ${prev ? `<a href="${prev.file}" class="nav-prev">← ${prev.title}</a>` : "<span></span>"}
         ${next ? `<a href="${next.file}" class="nav-next">${next.title} →</a>` : "<span></span>"}

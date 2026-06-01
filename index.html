@@ -3,14 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>LP Go Learning</title>
+  <title>LP Learning</title>
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 
 <header class="site-header">
-  <h1>LP Go Learning</h1>
-  <p>For developers joining from a React / Nest.js background &mdash; 14 modules</p>
+  <h1>LP Learning</h1>
+  <p>For developers joining from a Node.js background &mdash; 15 modules</p>
 </header>
 
 <main class="index-main">
@@ -22,16 +22,19 @@
         <div class="card-num">01</div>
         <div class="card-title">Go for JS Developers</div>
         <div class="card-desc">Types, zero values, multiple returns, no exceptions — mental model shift from JS</div>
+        <div class="card-time">⏱ 8 min</div>
       </a>
       <a href="lessons/02-core-language.html" class="module-card">
         <div class="card-num">02</div>
         <div class="card-title">Core Language</div>
         <div class="card-desc">Structs, interfaces (implicit), pointers, slices, maps, defer</div>
+        <div class="card-time">⏱ 7 min</div>
       </a>
       <a href="lessons/03-error-handling.html" class="module-card">
         <div class="card-num">03</div>
         <div class="card-title">Error Handling</div>
         <div class="card-desc">error type, nil-check pattern, fmt.Errorf, errors.As/Is, panic vs return</div>
+        <div class="card-time">⏱ 6 min</div>
       </a>
     </div>
   </section>
@@ -43,16 +46,19 @@
         <div class="card-num">04</div>
         <div class="card-title">Best Practices</div>
         <div class="card-desc">Naming, small interfaces, accept interfaces/return structs, table-driven tests</div>
+        <div class="card-time">⏱ 6 min</div>
       </a>
       <a href="lessons/05-anti-patterns.html" class="module-card">
         <div class="card-num">05</div>
         <div class="card-title">Anti-Patterns</div>
         <div class="card-desc">Ignoring errors, goroutine leaks, global state, panic abuse</div>
+        <div class="card-time">⏱ 7 min</div>
       </a>
       <a href="lessons/06-concurrency.html" class="module-card">
         <div class="card-num">06</div>
         <div class="card-title">Concurrency</div>
         <div class="card-desc">Goroutines, channels, context, sync primitives, errgroup — with real LP examples</div>
+        <div class="card-time">⏱ 45 min</div>
       </a>
     </div>
   </section>
@@ -60,45 +66,59 @@
   <section class="group-section project">
     <h2>Project</h2>
     <div class="module-grid">
-      <a href="lessons/07-file-structure.html" class="module-card">
+      <a href="lessons/07-git-flow.html" class="module-card">
         <div class="card-num">07</div>
+        <div class="card-title">Git Flow &amp; Commits</div>
+        <div class="card-desc">Branch strategy and commit conventions for CLM projects</div>
+        <div class="card-time">⏱ 20 min</div>
+      </a>
+      <a href="lessons/08-file-structure.html" class="module-card">
+        <div class="card-num">08</div>
         <div class="card-title">File Structure</div>
         <div class="card-desc">Annotated repo layout — where to add handlers, services, repos</div>
+        <div class="card-time">⏱ 5 min</div>
       </a>
-      <a href="lessons/08-libraries-integrations.html" class="module-card">
-        <div class="card-num">08</div>
+      <a href="lessons/09-libraries-integrations.html" class="module-card">
+        <div class="card-num">09</div>
         <div class="card-title">Libraries &amp; Integrations</div>
         <div class="card-desc">Fiber, GORM, MongoDB, Redis, Kafka, ECI, Viper, retry, rate limit, transactions</div>
+        <div class="card-time">⏱ 10 min</div>
       </a>
-      <a href="lessons/09-project-standards.html" class="module-card">
-        <div class="card-num">09</div>
+      <a href="lessons/10-project-standards.html" class="module-card">
+        <div class="card-num">10</div>
         <div class="card-title">Project Standards</div>
         <div class="card-desc">Handler→Service→Repo rules, Fiber patterns, repository interfaces, DI, zlog</div>
+        <div class="card-time">⏱ 8 min</div>
       </a>
-      <a href="lessons/10-life-cycle.html" class="module-card">
-        <div class="card-num">10</div>
+      <a href="lessons/11-life-cycle.html" class="module-card">
+        <div class="card-num">11</div>
         <div class="card-title">Life Cycle</div>
         <div class="card-desc">main.go → middleware chain → handler → response. Graceful shutdown.</div>
+        <div class="card-time">⏱ 25 min</div>
       </a>
-      <a href="lessons/11-dev-environment.html" class="module-card">
-        <div class="card-num">11</div>
+      <a href="lessons/12-dev-environment.html" class="module-card">
+        <div class="card-num">12</div>
         <div class="card-title">Dev Environment</div>
         <div class="card-desc">Clone, .env setup, make run/build/tidy, docker-compose up — first run checklist</div>
+        <div class="card-time">⏱ 6 min</div>
       </a>
-      <a href="lessons/12-testing.html" class="module-card">
-        <div class="card-num">12</div>
+      <a href="lessons/13-testing.html" class="module-card">
+        <div class="card-num">13</div>
         <div class="card-title">Testing</div>
         <div class="card-desc">Unit tests with mock repositories, table-driven tests, make test-coverage</div>
+        <div class="card-time">⏱ 6 min</div>
       </a>
-      <a href="lessons/13-build-deploy.html" class="module-card">
-        <div class="card-num">13</div>
+      <a href="lessons/14-build-deploy.html" class="module-card">
+        <div class="card-num">14</div>
         <div class="card-title">Build &amp; Deploy</div>
         <div class="card-desc">make build, Dockerfile, GitLab CI, blue/green deployment strategy</div>
+        <div class="card-time">⏱ 18 min</div>
       </a>
-      <a href="lessons/14-cdc.html" class="module-card">
-        <div class="card-num">14</div>
+      <a href="lessons/15-cdc.html" class="module-card">
+        <div class="card-num">15</div>
         <div class="card-title">Change Data Capture</div>
         <div class="card-desc">CDC concepts, Kafka JDBC sink connector, DB→topic pipeline, failure modes</div>
+        <div class="card-time">⏱ 12 min</div>
       </a>
     </div>
   </section>

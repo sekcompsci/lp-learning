@@ -3,14 +3,17 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>05 · Anti-Patterns — LP Go Learning</title>
+  <title>05 · Anti-Patterns — LP Learning</title>
   <link rel="stylesheet" href="../css/style.css">
 </head>
 <body>
 <nav id="lesson-nav"></nav>
 <main class="lesson-page">
 
-  <span class="badge craft">Craft</span>
+  <div class="lesson-header-meta">
+    <span class="badge craft">Craft</span>
+    <span class="lesson-time">⏱ 15 min read</span>
+  </div>
   <h1>05 · Anti-Patterns</h1>
   <p class="subtitle">Common Go mistakes — recognize and avoid them</p>
 
@@ -123,6 +126,199 @@ func main() {
 }</code></pre>
   </section>
 
+  <section>
+    <h2>Fiber <code>ctx</code> Value Reuse</h2>
+    <p>Fiber reuses <code>*fiber.Ctx</code> across requests for performance. Values from <code>c.Query()</code>, <code>c.Params()</code>, <code>c.Body()</code> point to pooled memory — storing them outside the handler lifetime corrupts future requests.</p>
+    <div class="callout warning">
+      <strong>Never pass <code>fiber.Ctx</code> values to goroutines or store them after the handler returns.</strong>
+    </div>
+    <pre><code>// BAD — goroutine reads stale/overwritten memory
+func HandleOrder(c *fiber.Ctx) error {
+  userID := c.Query("user_id") // pointer into pooled buffer
+  go processAsync(userID)      // buffer may be reused before goroutine runs
+  return c.SendStatus(202)
+}
+
+// GOOD — copy the value before spawning
+func HandleOrder(c *fiber.Ctx) error {
+  userID := c.Query("user_id")
+  userIDCopy := strings.Clone(userID) // own copy on the heap
+  go processAsync(userIDCopy)
+  return c.SendStatus(202)
+}</code></pre>
+  </section>
+
+  <section>
+    <h2>Loop Variable Capture in Goroutines</h2>
+    <p>Goroutines launched inside a loop share the loop variable by reference. By the time the goroutine runs, the loop has already advanced — all goroutines see the last value.</p>
+    <pre><code>// BAD — all goroutines print the same (last) item
+items := []string{"a", "b", "c"}
+for _, item := range items {
+  go func() {
+    fmt.Println(item) // captures &amp;item, not the value
+  }()
+}
+
+// GOOD — shadow the variable inside the loop body
+for _, item := range items {
+  item := item // new variable per iteration
+  go func() {
+    fmt.Println(item)
+  }()
+}
+
+// ALSO GOOD — pass as argument
+for _, item := range items {
+  go func(s string) {
+    fmt.Println(s)
+  }(item)
+}</code></pre>
+    <div class="callout info">
+      Go 1.22+ fixes this for <code>for</code> loop variables, but loop variables in <code>range</code> over slices still follow old semantics in pre-1.22 code. Always be explicit.
+    </div>
+  </section>
+
+  <section>
+    <h2>Handling an Error Twice</h2>
+    <p>Logging and returning an error causes duplicate log lines — each caller up the stack may log again.</p>
+    <pre><code>// BAD — logged here AND by the caller
+func GetUser(id string) (*User, error) {
+  user, err := db.Find(id)
+  if err != nil {
+    log.Printf("db.Find failed: %v", err) // logged once
+    return nil, err                        // caller logs again
+  }
+  return user, nil
+}
+
+// GOOD — return a wrapped error; log once at the top boundary
+func GetUser(id string) (*User, error) {
+  user, err := db.Find(id)
+  if err != nil {
+    return nil, fmt.Errorf("GetUser %s: %w", id, err)
+  }
+  return user, nil
+}
+
+// Log only at the handler/entry point
+func HandleGetUser(c *fiber.Ctx) error {
+  user, err := svc.GetUser(c.Params("id"))
+  if err != nil {
+    log.Printf("HandleGetUser: %v", err) // single log
+    return fiber.ErrInternalServerError
+  }
+  return c.JSON(user)
+}</code></pre>
+  </section>
+
+  <section>
+    <h2>String Concatenation in Loops</h2>
+    <p>Using <code>+</code> to build strings in a loop allocates a new string on every iteration — O(n²) memory cost.</p>
+    <pre><code>// BAD — n allocations for n iterations
+result := ""
+for _, part := range parts {
+  result += part // allocates new string every time
+}
+
+// GOOD — single allocation
+var b strings.Builder
+for _, part := range parts {
+  b.WriteString(part)
+}
+result := b.String()</code></pre>
+  </section>
+
+  <section>
+    <h2><code>defer</code> Inside a Loop</h2>
+    <p><code>defer</code> runs when the surrounding <em>function</em> returns, not at the end of the loop iteration. In a long-running loop over files or DB rows, deferred closes stack up and never run until the function exits.</p>
+    <pre><code>// BAD — files stay open until ProcessAll returns
+func ProcessAll(paths []string) error {
+  for _, p := range paths {
+    f, err := os.Open(p)
+    if err != nil { return err }
+    defer f.Close() // stacks, not per-iteration
+    process(f)
+  }
+  return nil
+}
+
+// GOOD — close in a helper function
+func ProcessAll(paths []string) error {
+  for _, p := range paths {
+    if err := processOne(p); err != nil {
+      return err
+    }
+  }
+  return nil
+}
+
+func processOne(path string) error {
+  f, err := os.Open(path)
+  if err != nil { return err }
+  defer f.Close() // runs when processOne returns — correct
+  return process(f)
+}</code></pre>
+  </section>
+
+  <section>
+    <h2>Slice Pre-allocation</h2>
+    <p>Appending to a nil slice when the final size is known causes repeated reallocation and copying as the backing array grows.</p>
+    <pre><code>// BAD — reallocates ~log₂(n) times
+var results []Order
+for _, row := range rows {
+  results = append(results, toOrder(row))
+}
+
+// GOOD — allocate once
+results := make([]Order, 0, len(rows))
+for _, row := range rows {
+  results = append(results, toOrder(row))
+}</code></pre>
+  </section>
+
+  <section>
+    <h2>Maps Never Shrink</h2>
+    <p>Deleting keys from a map frees the values but not the internal bucket array. A map that held 1 million keys still occupies ~the same memory after all keys are deleted.</p>
+    <pre><code>// Problematic pattern in a long-running cache
+cache := make(map[string][]byte)
+// ... fill with 1M entries ...
+for k := range cache {
+  delete(cache, k) // values freed, buckets remain
+}
+// cache still holds ~same memory footprint
+
+// Fix: replace the map entirely when bulk-clearing
+cache = make(map[string][]byte) // old map GC-eligible</code></pre>
+    <div class="callout info">
+      Use an LRU library or periodic map replacement for caches that grow and shrink frequently in production services.
+    </div>
+  </section>
+
+  <section>
+    <h2>Variable Shadowing with <code>:=</code></h2>
+    <p>Short variable declaration inside a block creates a <em>new</em> variable, not an assignment to the outer one. The outer variable is unchanged — a silent logic bug.</p>
+    <pre><code>// BAD — err in outer scope never updated
+var err error
+if someCondition {
+  result, err := doSomething() // new 'err' scoped to this block
+  _ = result
+  // outer err is still nil here
+}
+if err != nil { // always false — wrong!
+  return err
+}
+
+// GOOD — assign, don't redeclare
+var err error
+var result Result
+if someCondition {
+  result, err = doSomething() // = not :=
+}
+if err != nil {
+  return err
+}</code></pre>
+  </section>
+
   <div class="takeaways">
     <h3>Key Takeaways</h3>
     <ul>
@@ -132,6 +328,14 @@ func main() {
       <li>Return errors from handlers/services — never panic for expected failure cases</li>
       <li>Avoid <code>interface{}</code>/<code>any</code> — define concrete types instead</li>
       <li>Keep <code>init()</code> side-effect free — initialize explicitly in <code>main()</code></li>
+      <li>Copy Fiber <code>ctx</code> values before passing to goroutines — pooled memory gets reused</li>
+      <li>Shadow loop variables (<code>item := item</code>) before launching goroutines</li>
+      <li>Log OR return an error — never both; duplicate logs obscure root cause</li>
+      <li>Use <code>strings.Builder</code> for string building in loops</li>
+      <li>Wrap <code>defer</code> targets in a helper function when looping over resources</li>
+      <li>Pre-allocate slices with <code>make([]T, 0, n)</code> when final size is known</li>
+      <li>Replace maps entirely to free bucket memory — deleting keys alone does not shrink</li>
+      <li>Watch for <code>:=</code> shadowing — use <code>=</code> when updating an existing variable</li>
     </ul>
   </div>
 

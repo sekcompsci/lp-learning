@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>07 · Git Flow & Commits — LP Learning</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    /* scenario tabs */
+    .scenario-tabs { display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap; }
+    .scenario-tab {
+      padding:6px 16px; border-radius:4px; border:1px solid #bbb;
+      background:#fff; cursor:pointer; font-size:13px; font-family:system-ui,sans-serif;
+    }
+    .scenario-tab:hover { background:#e8f0f8; }
+    .scenario-tab.active { background:#1a73e8; color:#fff; border-color:#1a73e8; }
+
+    /* diagram wrapper */
+    .gf-wrap {
+      background:#f4f8ff; border:1px solid #c0d8f0;
+      border-radius:8px; padding:14px 16px; margin-bottom:20px;
+      overflow-x:auto;
+    }
+    .gf-svg { display:block; min-width:620px; }
+
+    /* SVG element visibility — all scenario elements start hidden */
+    .gf-el { opacity:0; transition:opacity 0.35s; }
+    .gf-el.show { opacity:1; }
+
+    /* caption */
+    .gf-caption {
+      font-size:13px; color:#333; min-height:20px;
+      font-family:'SF Mono',Consolas,monospace;
+      margin:10px 0 10px;
+    }
+
+    /* controls */
+    .gf-controls { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .gf-controls button {
+      padding:4px 12px; border-radius:4px; border:1px solid #bbb;
+      background:#fff; cursor:pointer; font-size:12px; font-family:system-ui,sans-serif;
+    }
+    .gf-controls button:hover:not(:disabled) { background:#e8f0f8; }
+    .gf-controls button:disabled { opacity:0.4; cursor:default; }
+    .gf-counter { font-size:11px; color:#888; }
+  </style>
+</head>
+<body>
+<nav id="lesson-nav"></nav>
+<main class="lesson-page">
+  <div class="lesson-header-meta">
+    <span class="badge craft">Craft</span>
+    <span class="lesson-time">⏱ 20 min read</span>
+  </div>
+  <h1>07 · Git Flow &amp; Commits</h1>
+  <p class="subtitle">Branch strategy and commit conventions for CLM projects</p>
+
+  <section>
+    <h2>Why Git Flow?</h2>
+    <p>Multiple developers work on separate tickets simultaneously. Without a clear branching model, <code>main</code> can receive half-finished work, versioned releases are impossible to isolate, and a hotfix drags in unrelated changes. Git Flow assigns a specific purpose to each branch type so all of these concerns stay separated.</p>
+  </section>
+
+  <section>
+    <h2>Branch Types</h2>
+    <table>
+      <thead>
+        <tr><th>Branch</th><th>Branches from</th><th>Naming</th><th>Purpose</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>main</code></td>
+          <td>—</td>
+          <td><code>main</code></td>
+          <td>Production-only; always stable; tagged on every release</td>
+        </tr>
+        <tr>
+          <td><code>develop</code></td>
+          <td><code>main</code> (initial setup)</td>
+          <td><code>develop</code></td>
+          <td>Integration branch; latest merged work lives here</td>
+        </tr>
+        <tr>
+          <td><code>feature</code></td>
+          <td><code>develop</code></td>
+          <td><code>feature/CLM-XXX</code></td>
+          <td>One ticket per branch; deleted after merge</td>
+        </tr>
+        <tr>
+          <td><code>release</code></td>
+          <td><code>develop</code> <em>or</em> <code>main</code></td>
+          <td><code>release/X.Y.Z</code></td>
+          <td>Stabilization buffer before deploy</td>
+        </tr>
+        <tr>
+          <td><code>hotfix</code></td>
+          <td><code>release</code></td>
+          <td><code>hotfix/CLM-XXX</code></td>
+          <td>Targeted fix inside a release branch</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Branch Flows</h2>
+    <p>Select a scenario and step through the flow. Active lanes are highlighted; inactive ones are dimmed.</p>
+
+    <div class="scenario-tabs">
+      <button class="scenario-tab active" data-scenario="feature" onclick="switchScenario('feature')">Feature Flow</button>
+      <button class="scenario-tab" data-scenario="release" onclick="switchScenario('release')">Release Flow</button>
+      <button class="scenario-tab" data-scenario="hotfix" onclick="switchScenario('hotfix')">Hotfix Flow</button>
+      <button class="scenario-tab" data-scenario="parallel" onclick="switchScenario('parallel')">Parallel Flow</button>
+    </div>
+
+    <div class="gf-wrap">
+      <svg id="gf-svg" class="gf-svg" viewBox="0 0 700 320" width="700" height="320" aria-label="Git Flow branch diagram">
+        <defs>
+          <marker id="arr"       markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><polygon points="0 0,7 3.5,0 7" fill="#555"/></marker>
+          <marker id="arr-green" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><polygon points="0 0,7 3.5,0 7" fill="#28a745"/></marker>
+          <marker id="arr-dark"  markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><polygon points="0 0,7 3.5,0 7" fill="#343a40"/></marker>
+          <marker id="arr-purp"  markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><polygon points="0 0,7 3.5,0 7" fill="#6f42c1"/></marker>
+        </defs>
+
+        <!-- ── Lane labels (always visible; opacity driven by JS) ── -->
+        <g id="lbl-main">
+          <rect x="1" y="27" width="82" height="22" rx="4" fill="#343a40"/>
+          <text x="42" y="42" text-anchor="middle" fill="white" font-size="11" font-family="'SF Mono',Consolas,monospace">main</text>
+        </g>
+        <g id="lbl-develop">
+          <rect x="1" y="87" width="82" height="22" rx="4" fill="#0d6efd"/>
+          <text x="42" y="102" text-anchor="middle" fill="white" font-size="11" font-family="'SF Mono',Consolas,monospace">develop</text>
+        </g>
+        <g id="lbl-release">
+          <rect x="1" y="147" width="82" height="22" rx="4" fill="#6f42c1"/>
+          <text x="42" y="162" text-anchor="middle" fill="white" font-size="11" font-family="'SF Mono',Consolas,monospace">release</text>
+        </g>
+        <g id="lbl-feature">
+          <rect x="1" y="207" width="82" height="22" rx="4" fill="#fd7e14"/>
+          <text x="42" y="222" text-anchor="middle" fill="white" font-size="11" font-family="'SF Mono',Consolas,monospace">feature</text>
+        </g>
+        <g id="lbl-hotfix">
+          <rect x="1" y="267" width="82" height="22" rx="4" fill="#dc3545"/>
+          <text x="42" y="282" text-anchor="middle" fill="white" font-size="11" font-family="'SF Mono',Consolas,monospace">hotfix</text>
+        </g>
+
+        <!-- ══════════════════════════════════════
+             FEATURE FLOW
+             lanes used: main (dim), develop, feature
+        ══════════════════════════════════════ -->
+        <!-- tracks -->
+        <line id="ff-main-line" class="gf-el" x1="100" y1="38" x2="620" y2="38" stroke="#ccc" stroke-width="2"/>
+        <line id="ff-dev-line"  class="gf-el" x1="100" y1="98" x2="620" y2="98" stroke="#0d6efd" stroke-width="2"/>
+        <line id="ff-feat-line" class="gf-el" x1="200" y1="218" x2="420" y2="218" stroke="#fd7e14" stroke-width="2"/>
+
+        <!-- develop commits -->
+        <circle id="ff-d0" class="gf-el" cx="140" cy="98" r="8" fill="#0d6efd"/>
+        <text   id="ff-d0-lbl" class="gf-el" x="140" y="85" text-anchor="middle" fill="#555" font-size="10" font-family="monospace">D0</text>
+
+        <circle id="ff-d1" class="gf-el" cx="200" cy="98" r="8" fill="#0d6efd"/>
+        <text   id="ff-d1-lbl" class="gf-el" x="200" y="85" text-anchor="middle" fill="#555" font-size="10" font-family="monospace">D1</text>
+
+        <circle id="ff-d2" class="gf-el" cx="490" cy="98" r="8" fill="#0d6efd" stroke="#28a745" stroke-width="2.5"/>
+        <text   id="ff-d2-lbl" class="gf-el" x="490" y="85" text-anchor="middle" fill="#28a745" font-size="10" font-family="monospace">merge</text>
+
+        <!-- branch line develop → feature -->
+        <line id="ff-branch-down" class="gf-el" x1="200" y1="106" x2="200" y2="210" stroke="#fd7e14" stroke-width="1.5" stroke-dasharray="4 3"/>
+        <text id="ff-branch-lbl"  class="gf-el" x="216" y="165" fill="#fd7e14" font-size="10" font-family="monospace">feature/CLM-130</text>
+
+        <!-- feature commits -->
+        <circle id="ff-f0" class="gf-el" cx="290" cy="218" r="8" fill="#fd7e14"/>
+        <text   id="ff-f0-lbl" class="gf-el" x="290" y="236" text-anchor="middle" fill="#555" font-size="10" font-family="monospace">F1</text>
+
+        <circle id="ff-f1" class="gf-el" cx="390" cy="218" r="8" fill="#fd7e14"/>
+        <text   id="ff-f1-lbl" class="gf-el" x="390" y="236" text-anchor="middle" fill="#555" font-size="10" font-family="monospace">F2</text>
+
+        <!-- merge arrow feature → develop -->
+        <line id="ff-merge-up" class="gf-el" x1="392" y1="211" x2="487" y2="107" stroke="#28a745" stroke-width="2" marker-end="url(#arr-green)"/>
+
+        <!-- ══════════════════════════════════════
+             RELEASE FLOW
+             lanes used: main, develop, release, feature (for fix branch)
+        ══════════════════════════════════════ -->
+        <line id="rf-main-line" class="gf-el" x1="100" y1="38" x2="620" y2="38" stroke="#343a40" stroke-width="2"/>
+        <line id="rf-dev-line"  class="gf-el" x1="100" y1="98" x2="620" y2="98" stroke="#0d6efd" stroke-width="2"/>
+        <line id="rf-rel-line"  class="gf-el" x1="220" y1="158" x2="510" y2="158" stroke="#6f42c1" stroke-width="2"/>
+        <line id="rf-fix-line"  class="gf-el" x1="320" y1="218" x2="440" y2="218" stroke="#fd7e14" stroke-width="2"/>
+
+        <!-- develop commits -->
+        <circle id="rf-d0" class="gf-el" cx="120" cy="98" r="7" fill="#0d6efd"/>
+        <circle id="rf-d1" class="gf-el" cx="160" cy="98" r="7" fill="#0d6efd"/>
+        <circle id="rf-d2" class="gf-el" cx="220" cy="98" r="7" fill="#0d6efd"/>
+        <circle id="rf-d3" class="gf-el" cx="290" cy="98" r="7" fill="#0d6efd"/>
+        <text   id="rf-d3-lbl" class="gf-el" x="290" y="85" text-anchor="middle" fill="#0d6efd" font-size="9" font-family="monospace">bump ver</text>
+        <circle id="rf-d4" class="gf-el" cx="600" cy="98" r="7" fill="#0d6efd" stroke="#28a745" stroke-width="2.5"/>
+        <text   id="rf-d4-lbl" class="gf-el" x="600" y="85" text-anchor="middle" fill="#28a745" font-size="9" font-family="monospace">← release</text>
+
+        <!-- release commits -->
+        <circle id="rf-r0" class="gf-el" cx="220" cy="158" r="7" fill="#6f42c1"/>
+        <text   id="rf-r0-lbl" class="gf-el" x="220" y="176" text-anchor="middle" fill="#6f42c1" font-size="9" font-family="monospace">1.2.0</text>
+        <circle id="rf-r1" class="gf-el" cx="320" cy="158" r="7" fill="#6f42c1"/>
+        <text   id="rf-r1-lbl" class="gf-el" x="320" y="176" text-anchor="middle" fill="#555" font-size="9" font-family="monospace">QA ✓</text>
+        <circle id="rf-r2" class="gf-el" cx="490" cy="158" r="7" fill="#6f42c1" stroke="#28a745" stroke-width="2"/>
+        <text   id="rf-r2-lbl" class="gf-el" x="490" y="176" text-anchor="middle" fill="#28a745" font-size="9" font-family="monospace">merge</text>
+
+        <!-- fix branch from release (feature lane row) -->
+        <line id="rf-branch-fix"  class="gf-el" x1="320" y1="165" x2="320" y2="211" stroke="#fd7e14" stroke-width="1.5" stroke-dasharray="4 3"/>
+        <text id="rf-fix-lbl"     class="gf-el" x="336" y="197" fill="#fd7e14" font-size="9" font-family="monospace">feature/CLM-135</text>
+        <circle id="rf-fx0" class="gf-el" cx="410" cy="218" r="7" fill="#fd7e14"/>
+        <text   id="rf-fx0-lbl" class="gf-el" x="410" y="236" text-anchor="middle" fill="#555" font-size="9" font-family="monospace">fix</text>
+        <line id="rf-merge-fix"   class="gf-el" x1="413" y1="211" x2="486" y2="165" stroke="#fd7e14" stroke-width="2" marker-end="url(#arr)"/>
+
+        <!-- main commit + tag -->
+        <circle id="rf-m0" class="gf-el" cx="554" cy="38" r="8" fill="#343a40" stroke="#ffd700" stroke-width="2.5"/>
+        <text   id="rf-tag" class="gf-el" x="554" y="25" text-anchor="middle" fill="#b8860b" font-size="10" font-family="monospace" font-weight="bold">v1.2.0 🏷</text>
+
+        <!-- branch/merge lines -->
+        <line id="rf-branch-down" class="gf-el" x1="220" y1="105" x2="220" y2="151" stroke="#6f42c1" stroke-width="1.5" stroke-dasharray="4 3"/>
+        <line id="rf-merge-main"  class="gf-el" x1="493" y1="151" x2="549" y2="46"  stroke="#343a40" stroke-width="2" marker-end="url(#arr-dark)"/>
+        <line id="rf-merge-dev"   class="gf-el" x1="508" y1="162" x2="595" y2="105" stroke="#28a745" stroke-width="2" marker-end="url(#arr-green)"/>
+
+        <!-- ══════════════════════════════════════
+             HOTFIX FLOW
+             lanes used: main, develop, release, hotfix
+        ══════════════════════════════════════ -->
+        <line id="hf-main-line" class="gf-el" x1="100" y1="38" x2="620" y2="38" stroke="#343a40" stroke-width="2"/>
+        <line id="hf-dev-line"  class="gf-el" x1="100" y1="98" x2="620" y2="98" stroke="#0d6efd" stroke-width="2"/>
+        <line id="hf-rel-line"  class="gf-el" x1="190" y1="158" x2="490" y2="158" stroke="#6f42c1" stroke-width="2"/>
+        <line id="hf-fix-line"  class="gf-el" x1="230" y1="278" x2="390" y2="278" stroke="#dc3545" stroke-width="2"/>
+
+        <!-- main commits -->
+        <circle id="hf-m0" class="gf-el" cx="140" cy="38" r="8" fill="#343a40" stroke="#ffd700" stroke-width="2.5"/>
+        <text   id="hf-m0-tag" class="gf-el" x="140" y="25" text-anchor="middle" fill="#b8860b" font-size="10" font-family="monospace" font-weight="bold">v1.2.0 🏷</text>
+        <circle id="hf-m1" class="gf-el" cx="490" cy="38" r="8" fill="#343a40" stroke="#ffd700" stroke-width="2.5"/>
+        <text   id="hf-m1-tag" class="gf-el" x="490" y="25" text-anchor="middle" fill="#b8860b" font-size="10" font-family="monospace" font-weight="bold">v1.2.1 🏷</text>
+        <text   id="hf-issue" class="gf-el" x="140" y="56" text-anchor="middle" fill="#dc3545" font-size="9" font-family="monospace">🔥 issue</text>
+
+        <!-- develop commits -->
+        <circle id="hf-d0" class="gf-el" cx="140" cy="98" r="7" fill="#0d6efd"/>
+        <circle id="hf-d1" class="gf-el" cx="540" cy="98" r="7" fill="#0d6efd" stroke="#28a745" stroke-width="2.5"/>
+        <text   id="hf-d1-lbl" class="gf-el" x="540" y="85" text-anchor="middle" fill="#28a745" font-size="9" font-family="monospace">← release</text>
+
+        <!-- release commits -->
+        <circle id="hf-r0" class="gf-el" cx="190" cy="158" r="7" fill="#6f42c1"/>
+        <text   id="hf-r0-lbl" class="gf-el" x="210" y="176" fill="#6f42c1" font-size="9" font-family="monospace">release/1.2.1</text>
+        <circle id="hf-r1" class="gf-el" cx="400" cy="158" r="7" fill="#6f42c1"/>
+
+        <!-- hotfix commit -->
+        <circle id="hf-h1" class="gf-el" cx="310" cy="278" r="7" fill="#dc3545"/>
+        <text   id="hf-h1-lbl" class="gf-el" x="310" y="295" text-anchor="middle" fill="#555" font-size="9" font-family="monospace">hotfix/CLM-150</text>
+
+        <!-- branch/merge lines -->
+        <line id="hf-branch-rel"  class="gf-el" x1="142" y1="46"  x2="188" y2="151" stroke="#6f42c1" stroke-width="1.5" stroke-dasharray="4 3"/>
+        <line id="hf-branch-fix"  class="gf-el" x1="230" y1="165" x2="230" y2="271" stroke="#dc3545" stroke-width="1.5" stroke-dasharray="4 3"/>
+        <line id="hf-merge-rel"   class="gf-el" x1="313" y1="271" x2="397" y2="165" stroke="#6f42c1" stroke-width="2" marker-end="url(#arr-purp)"/>
+        <line id="hf-merge-main"  class="gf-el" x1="403" y1="151" x2="486" y2="46"  stroke="#343a40" stroke-width="2" marker-end="url(#arr-dark)"/>
+        <line id="hf-merge-dev"   class="gf-el" x1="488" y1="165" x2="536" y2="105" stroke="#28a745" stroke-width="2" marker-end="url(#arr-green)"/>
+
+        <!-- ══════════════════════════════════════
+             PARALLEL FLOW
+             Dev A works on release, Dev B works on feature/CLM-200 from develop
+             lanes: main (dim), develop, release, feature
+        ══════════════════════════════════════ -->
+        <!-- parallel zone background (drawn first = behind commits) -->
+        <rect id="pf-par-zone" class="gf-el" x="248" y="148" width="275" height="78" rx="4" fill="#e8f5e9" stroke="#c8e6c9" stroke-width="1" opacity="0.7"/>
+
+        <!-- lane tracks -->
+        <line id="pf-main-line" class="gf-el" x1="100" y1="38" x2="620" y2="38" stroke="#ccc" stroke-width="2"/>
+        <line id="pf-dev-line"  class="gf-el" x1="100" y1="98" x2="620" y2="98" stroke="#0d6efd" stroke-width="2"/>
+        <line id="pf-rel-line"  class="gf-el" x1="180" y1="158" x2="540" y2="158" stroke="#6f42c1" stroke-width="2"/>
+        <line id="pf-feat-line" class="gf-el" x1="250" y1="218" x2="540" y2="218" stroke="#fd7e14" stroke-width="2"/>
+
+        <!-- develop commits -->
+        <circle id="pf-d0" class="gf-el" cx="120" cy="98" r="7" fill="#0d6efd"/>
+        <circle id="pf-d1" class="gf-el" cx="180" cy="98" r="7" fill="#0d6efd"/>
+        <circle id="pf-d2" class="gf-el" cx="250" cy="98" r="7" fill="#0d6efd"/>
+        <text   id="pf-d2-lbl" class="gf-el" x="250" y="85" text-anchor="middle" fill="#0d6efd" font-size="9" font-family="monospace">bump ver</text>
+
+        <!-- branch develop → release -->
+        <line id="pf-branch-rel" class="gf-el" x1="180" y1="105" x2="180" y2="151" stroke="#6f42c1" stroke-width="1.5" stroke-dasharray="4 3"/>
+
+        <!-- release commits -->
+        <circle id="pf-r0" class="gf-el" cx="180" cy="158" r="7" fill="#6f42c1"/>
+        <text   id="pf-r0-lbl" class="gf-el" x="180" y="176" text-anchor="middle" fill="#6f42c1" font-size="9" font-family="monospace">1.2.0</text>
+        <circle id="pf-r1" class="gf-el" cx="340" cy="158" r="7" fill="#6f42c1"/>
+        <text   id="pf-r1-lbl" class="gf-el" x="340" y="176" text-anchor="middle" fill="#555" font-size="9" font-family="monospace">Dev A</text>
+        <circle id="pf-r2" class="gf-el" cx="460" cy="158" r="7" fill="#6f42c1"/>
+        <text   id="pf-r2-lbl" class="gf-el" x="460" y="176" text-anchor="middle" fill="#555" font-size="9" font-family="monospace">Dev A</text>
+
+        <!-- branch develop → feature -->
+        <line id="pf-branch-feat" class="gf-el" x1="250" y1="105" x2="250" y2="211" stroke="#fd7e14" stroke-width="1.5" stroke-dasharray="4 3"/>
+        <text id="pf-feat-lbl"    class="gf-el" x="266" y="170" fill="#fd7e14" font-size="9" font-family="monospace">feature/CLM-200</text>
+
+        <!-- feature commits -->
+        <circle id="pf-f0" class="gf-el" cx="250" cy="218" r="7" fill="#fd7e14"/>
+        <circle id="pf-f1" class="gf-el" cx="340" cy="218" r="7" fill="#fd7e14"/>
+        <text   id="pf-f1-lbl" class="gf-el" x="340" y="236" text-anchor="middle" fill="#555" font-size="9" font-family="monospace">Dev B</text>
+        <circle id="pf-f2" class="gf-el" cx="460" cy="218" r="7" fill="#fd7e14"/>
+        <text   id="pf-f2-lbl" class="gf-el" x="460" y="236" text-anchor="middle" fill="#555" font-size="9" font-family="monospace">Dev B</text>
+      </svg>
+
+      <p id="gf-caption" class="gf-caption">Press Step or Play to begin.</p>
+      <div class="gf-controls">
+        <button id="btn-step" onclick="gfStep()">Step →</button>
+        <button id="btn-play" onclick="gfPlay()">▶ Play</button>
+        <button id="btn-reset" onclick="gfReset()">↺ Reset</button>
+        <span id="gf-counter" class="gf-counter"></span>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Commit Format — Commitizen</h2>
+    <p>All commits follow the <strong>Conventional Commits</strong> spec, enforced via Commitizen (<code>cz commit</code>).</p>
+
+    <pre><code>&lt;type&gt;(&lt;scope&gt;): &lt;subject&gt;
+
+[optional body]
+
+[optional footer — BREAKING CHANGE, refs CLM-XXX]</code></pre>
+
+    <table>
+      <thead><tr><th>Type</th><th>When to use</th></tr></thead>
+      <tbody>
+        <tr><td><code>feat</code></td><td>New feature</td></tr>
+        <tr><td><code>fix</code></td><td>Bug fix</td></tr>
+        <tr><td><code>chore</code></td><td>Build scripts, dependencies, tooling</td></tr>
+        <tr><td><code>docs</code></td><td>Documentation only</td></tr>
+        <tr><td><code>refactor</code></td><td>Refactor with no feat or fix</td></tr>
+        <tr><td><code>test</code></td><td>Adding or fixing tests</td></tr>
+        <tr><td><code>perf</code></td><td>Performance improvement</td></tr>
+        <tr><td><code>ci</code></td><td>CI/CD config changes</td></tr>
+        <tr><td><code>style</code></td><td>Formatting — no logic change</td></tr>
+      </tbody>
+    </table>
+
+    <p>The <strong>scope</strong> is the service or module: <code>coupon-api</code>, <code>reward-store</code>, <code>kafka</code>.</p>
+
+    <pre><code>feat(coupon-api): add bulk redeem endpoint
+
+fix(reward-store): prevent double-credit on retry
+
+chore(deps): bump gin to v1.9.1
+
+refactor(coupon-api): extract redemption logic to service layer
+
+feat(coupon-api)!: rename RewardStore to RewardRepository
+
+BREAKING CHANGE: RewardStore interface removed; use RewardRepository</code></pre>
+  </section>
+
+  <div class="takeaways">
+    <h3>Key Takeaways</h3>
+    <ul>
+      <li><code>main</code> is production-only — never commit directly to it</li>
+      <li><code>develop</code> is the integration point — all features merge here first</li>
+      <li>One ticket = one <code>feature/CLM-XXX</code> branch; delete after merge</li>
+      <li>Hotfix uses a <code>release</code> branch cut from <code>main</code>, not from <code>develop</code></li>
+      <li>Tag <code>main</code> after every release or hotfix merge</li>
+      <li><code>feat</code> and <code>fix</code> drive the changelog; <code>!</code> suffix marks breaking changes</li>
+    </ul>
+  </div>
+</main>
+<script src="../js/nav.js"></script>
+<script>
+const SCENARIOS = {
+  feature: {
+    active: { main: false, develop: true, release: false, feature: true, hotfix: false },
+    steps: [
+      { ids: ['ff-main-line','ff-dev-line','ff-d0','ff-d0-lbl'],
+        caption: 'develop has existing commits — sprint starts here' },
+      { ids: ['ff-d1','ff-d1-lbl'],
+        caption: 'latest develop commit before branching' },
+      { ids: ['ff-branch-down','ff-feat-line','ff-branch-lbl'],
+        caption: 'branch feature/CLM-130 from develop' },
+      { ids: ['ff-f0','ff-f0-lbl'],
+        caption: 'commit F1 on feature/CLM-130 — development in progress' },
+      { ids: ['ff-f1','ff-f1-lbl'],
+        caption: 'commit F2 — unit tests pass, open MR for code review' },
+      { ids: ['ff-merge-up','ff-d2','ff-d2-lbl'],
+        caption: 'review approved → merge feature/CLM-130 into develop' },
+    ]
+  },
+  release: {
+    active: { main: true, develop: true, release: true, feature: true, hotfix: false },
+    steps: [
+      { ids: ['rf-main-line','rf-dev-line','rf-d0','rf-d1','rf-d2'],
+        caption: 'all feature branches merged to develop — ready for release' },
+      { ids: ['rf-branch-down','rf-rel-line','rf-r0','rf-r0-lbl'],
+        caption: 'branch release/1.2.0 from develop' },
+      { ids: ['rf-d3','rf-d3-lbl'],
+        caption: 'bump develop version to 1.3.0-dev — parallel work continues' },
+      { ids: ['rf-r1','rf-r1-lbl'],
+        caption: 'QA testing on release/1.2.0 — bug or update found' },
+      { ids: ['rf-branch-fix','rf-fix-line','rf-fix-lbl'],
+        caption: 'branch feature/CLM-135 from release/1.2.0 to fix the issue' },
+      { ids: ['rf-fx0','rf-fx0-lbl'],
+        caption: 'fix → unit test → open MR, code review approved' },
+      { ids: ['rf-merge-fix','rf-r2','rf-r2-lbl'],
+        caption: 'merge feature/CLM-135 back into release/1.2.0' },
+      { ids: ['rf-merge-main','rf-m0','rf-tag'],
+        caption: 'stable → deploy production → merge release/1.2.0 into main, tag v1.2.0' },
+      { ids: ['rf-merge-dev','rf-d4','rf-d4-lbl'],
+        caption: 'merge release/1.2.0 back into develop — carry fixes forward' },
+    ]
+  },
+  hotfix: {
+    active: { main: true, develop: true, release: true, feature: false, hotfix: true },
+    steps: [
+      { ids: ['hf-main-line','hf-dev-line','hf-m0','hf-m0-tag','hf-d0'],
+        caption: 'production is running v1.2.0 on main' },
+      { ids: ['hf-issue'],
+        caption: '🔥 production issue found — hotfix needed' },
+      { ids: ['hf-branch-rel','hf-rel-line','hf-r0','hf-r0-lbl'],
+        caption: 'branch release/1.2.1 from main — NOT from develop' },
+      { ids: ['hf-branch-fix','hf-fix-line'],
+        caption: 'branch hotfix/CLM-150 from release/1.2.1' },
+      { ids: ['hf-h1','hf-h1-lbl'],
+        caption: 'commit fix — unit tests pass, open MR for code review' },
+      { ids: ['hf-merge-rel','hf-r1'],
+        caption: 'review approved → merge hotfix/CLM-150 into release/1.2.1' },
+      { ids: ['hf-merge-main','hf-m1','hf-m1-tag'],
+        caption: 'deploy production → merge release/1.2.1 into main, tag v1.2.1' },
+      { ids: ['hf-merge-dev','hf-d1','hf-d1-lbl'],
+        caption: 'merge release/1.2.1 into develop — carry fix forward' },
+    ]
+  },
+  parallel: {
+    active: { main: false, develop: true, release: true, feature: true, hotfix: false },
+    steps: [
+      { ids: ['pf-main-line','pf-dev-line','pf-d0','pf-d1'],
+        caption: 'develop has merged features — ready to cut a release' },
+      { ids: ['pf-branch-rel','pf-rel-line','pf-r0','pf-r0-lbl'],
+        caption: 'Dev A branches release/1.2.0 from develop for stabilization' },
+      { ids: ['pf-d2','pf-d2-lbl'],
+        caption: 'develop bumps version to 1.3.0-dev — release branch is now isolated' },
+      { ids: ['pf-branch-feat','pf-par-zone','pf-feat-line','pf-feat-lbl','pf-f0'],
+        caption: 'Dev B branches feature/CLM-200 from bumped develop — both lanes are now independent' },
+      { ids: ['pf-r1','pf-r1-lbl','pf-f1','pf-f1-lbl'],
+        caption: 'simultaneously: Dev A testing on release, Dev B committing on feature — no blocking' },
+      { ids: ['pf-r2','pf-r2-lbl','pf-f2','pf-f2-lbl'],
+        caption: 'both continue to progress independently — release does not block new development' },
+    ]
+  }
+};
+
+const LBL_IDS = {
+  main: 'lbl-main', develop: 'lbl-develop',
+  release: 'lbl-release', feature: 'lbl-feature', hotfix: 'lbl-hotfix'
+};
+
+let current = 'feature';
+let step = -1;
+let timer = null;
+
+const captionEl = document.getElementById('gf-caption');
+const counterEl = document.getElementById('gf-counter');
+const btnStep   = document.getElementById('btn-step');
+const btnPlay   = document.getElementById('btn-play');
+const btnReset  = document.getElementById('btn-reset');
+
+function allIds() {
+  return Object.values(SCENARIOS).flatMap(s => s.steps.flatMap(st => st.ids));
+}
+
+function gfReset() {
+  if (timer) { clearTimeout(timer); timer = null; }
+  step = -1;
+  allIds().forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.remove('show');
+  });
+  Object.entries(LBL_IDS).forEach(([key, id]) => {
+    const el = document.getElementById(id);
+    if (el) el.style.opacity = SCENARIOS[current].active[key] ? '1' : '0.2';
+  });
+  captionEl.textContent = 'Press Step or Play to begin.';
+  counterEl.textContent = '';
+  btnStep.disabled = false;
+  btnPlay.disabled = false;
+}
+
+function advance() {
+  const steps = SCENARIOS[current].steps;
+  step++;
+  if (step >= steps.length) {
+    captionEl.textContent = '— end of flow —';
+    counterEl.textContent = '';
+    btnStep.disabled = true;
+    btnPlay.disabled = true;
+    return false;
+  }
+  const s = steps[step];
+  s.ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.add('show');
+  });
+  captionEl.textContent = s.caption;
+  counterEl.textContent = (step + 1) + ' / ' + steps.length;
+  return step < steps.length - 1;
+}
+
+function gfStep() {
+  if (timer) return;
+  advance();
+}
+
+function gfPlay() {
+  if (timer) return;
+  btnStep.disabled = true;
+  btnPlay.disabled = true;
+  (function tick() {
+    const more = advance();
+    if (more) timer = setTimeout(tick, 900);
+    else timer = null;
+  })();
+}
+
+function switchScenario(name) {
+  if (timer) { clearTimeout(timer); timer = null; }
+  current = name;
+  document.querySelectorAll('.scenario-tab').forEach(t =>
+    t.classList.toggle('active', t.dataset.scenario === name)
+  );
+  gfReset();
+}
+
+switchScenario('feature');
+</script>
+</body>
+</html>
