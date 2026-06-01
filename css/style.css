@@ -310,6 +310,16 @@ p code, li code {
 }
 .hamburger span { display: block; height: 2px; background: #444; border-radius: 1px; }
 
+/* ── Footer ── */
+.site-footer {
+  margin-top: 64px;
+  padding: 24px;
+  text-align: center;
+  font-size: 13px;
+  color: #999;
+  border-top: 1px solid #e8e8e8;
+}
+
 /* Mobile overlay */
 #sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 99; }
 #sidebar-overlay.active { display: block; }
